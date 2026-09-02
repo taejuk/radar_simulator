@@ -2,7 +2,7 @@
 
 #include "common/packet.h"
 #include "common/tcp.h"
-
+#include "config.h"
 #include <stdint.h>
 #include <stdio.h>
 

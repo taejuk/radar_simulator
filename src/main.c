@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include "common/comm_thread.h"
 
 #include "device/device_a.h"
@@ -11,129 +13,72 @@
 #include <stdio.h>
 
 
-#define DEVICE_COUNT 6
-
-
 int main(void)
 {
-    pthread_t threads[
-        DEVICE_COUNT
-    ];
+    pthread_t threads[DEVICE_COUNT];
 
 
-    device_context_t devices[
-        DEVICE_COUNT
-    ] =
+    device_context_t devices[DEVICE_COUNT] =
     {
         {
             .device_id = 1,
-
-            .port = 5001,
-
+            .port = DEVICE_A_PORT,
             .listen_fd = -1,
-
             .client_fd = -1,
-
             .state = 0,
-
-            .packet_handler =
-                device_a_handler
+            .packet_handler = device_a_handler
         },
-
 
         {
             .device_id = 2,
-
-            .port = 5002,
-
+            .port = DEVICE_B_PORT,
             .listen_fd = -1,
-
             .client_fd = -1,
-
             .state = 0,
-
-            .packet_handler =
-                device_b_handler
+            .packet_handler = device_b_handler
         },
-
 
         {
             .device_id = 3,
-
-            .port = 5003,
-
+            .port = DEVICE_C_PORT,
             .listen_fd = -1,
-
             .client_fd = -1,
-
             .state = 0,
-
-            .packet_handler =
-                device_c_handler
+            .packet_handler = device_c_handler
         },
-
 
         {
             .device_id = 4,
-
-            .port = 5004,
-
+            .port = DEVICE_D_PORT,
             .listen_fd = -1,
-
             .client_fd = -1,
-
             .state = 0,
-
-            .packet_handler =
-                device_d_handler
+            .packet_handler = device_d_handler
         },
-
 
         {
             .device_id = 5,
-
-            .port = 5005,
-
+            .port = DEVICE_E_PORT,
             .listen_fd = -1,
-
             .client_fd = -1,
-
             .state = 0,
-
-            .packet_handler =
-                device_e_handler
+            .packet_handler = device_e_handler
         },
-
 
         {
             .device_id = 6,
-
-            .port = 5006,
-
+            .port = DEVICE_F_PORT,
             .listen_fd = -1,
-
             .client_fd = -1,
-
             .state = 0,
-
-            .packet_handler =
-                device_f_handler
+            .packet_handler = device_f_handler
         }
     };
 
 
-    /*
-     * ==============================
-     * Thread 생성
-     * ==============================
-     */
-
-    for (int i = 0;
-         i < DEVICE_COUNT;
-         ++i)
+    for (int i = 0; i < DEVICE_COUNT; ++i)
     {
         int ret;
-
 
         ret = pthread_create(
             &threads[i],
@@ -142,31 +87,20 @@ int main(void)
             &devices[i]
         );
 
-
         if (ret != 0)
         {
             fprintf(
                 stderr,
-                "pthread_create failed "
-                "for device %d\n",
+                "pthread_create failed: device=%d\n",
                 devices[i].device_id
             );
-
 
             return 1;
         }
     }
 
 
-    /*
-     * ==============================
-     * Thread 종료 대기
-     * ==============================
-     */
-
-    for (int i = 0;
-         i < DEVICE_COUNT;
-         ++i)
+    for (int i = 0; i < DEVICE_COUNT; ++i)
     {
         pthread_join(
             threads[i],

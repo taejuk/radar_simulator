@@ -1,0 +1,16 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define DEVICE_COUNT        @DEVICE_COUNT@
+
+#define DEVICE_A_PORT       @DEVICE_A_PORT@
+#define DEVICE_B_PORT       @DEVICE_B_PORT@
+#define DEVICE_C_PORT       @DEVICE_C_PORT@
+#define DEVICE_D_PORT       @DEVICE_D_PORT@
+#define DEVICE_E_PORT       @DEVICE_E_PORT@
+#define DEVICE_F_PORT       @DEVICE_F_PORT@
+
+#define MAX_PAYLOAD_SIZE    @MAX_PAYLOAD_SIZE@
+#define LISTEN_BACKLOG      @LISTEN_BACKLOG@
+
+#endif

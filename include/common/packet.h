@@ -6,8 +6,6 @@
 
 
 #define PACKET_HEADER_SIZE  16U
-#define MAX_PAYLOAD_SIZE    4096U
-
 
 typedef enum
 {

@@ -1,5 +1,5 @@
 #include "common/packet.h"
-
+#include "config.h"
 
 int packet_header_validate(
     const packet_header_t *header)

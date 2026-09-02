@@ -1,4 +1,5 @@
 #include "common/tcp.h"
+#include "config.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -68,7 +69,7 @@ int tcp_server_create(
      */
     if (listen(
             socket_fd,
-            1) < 0)
+            LISTEN_BACKLOG) < 0)
     {
         close(socket_fd);
 
