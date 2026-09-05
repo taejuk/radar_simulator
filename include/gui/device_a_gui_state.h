@@ -113,6 +113,12 @@ int device_a_gui_submit_response(
     const char *payload
 );
 
+/*
+ * GUI 종료를 통신 스레드에 알린다.
+ */
+void device_a_gui_request_shutdown(
+    device_a_gui_state_t *state
+);
 
 #ifdef __cplusplus
 }
