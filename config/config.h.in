@@ -3,6 +3,8 @@
 
 #define DEVICE_COUNT        @DEVICE_COUNT@
 
+#define SERVER_IP           "@SERVER_IP@"
+
 #define DEVICE_A_PORT       @DEVICE_A_PORT@
 #define DEVICE_B_PORT       @DEVICE_B_PORT@
 #define DEVICE_C_PORT       @DEVICE_C_PORT@

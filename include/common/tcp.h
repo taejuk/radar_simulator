@@ -11,6 +11,11 @@ int tcp_server_create(
     uint16_t port
 );
 
+int tcp_client_connect(
+    const char *server_ip,
+    uint16_t port
+);
+
 
 int tcp_accept(
     int listen_fd

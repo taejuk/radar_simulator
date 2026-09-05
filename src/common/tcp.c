@@ -6,7 +6,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
+#include <string.h>
 
 int tcp_server_create(
     uint16_t port)
@@ -80,6 +80,85 @@ int tcp_server_create(
     return socket_fd;
 }
 
+int tcp_client_connect(
+    const char *server_ip,
+    uint16_t port)
+{
+    int socket_fd;
+
+    struct sockaddr_in server_address;
+
+
+    if (server_ip == NULL)
+    {
+        errno = EINVAL;
+
+        return -1;
+    }
+
+
+    /*
+     * TCP socket 생성
+     */
+    socket_fd = socket(
+        AF_INET,
+        SOCK_STREAM,
+        0
+    );
+
+    if (socket_fd < 0)
+    {
+        return -1;
+    }
+
+
+    /*
+     * 연결할 서버 주소 설정
+     */
+    memset(
+        &server_address,
+        0,
+        sizeof(server_address)
+    );
+
+    server_address.sin_family = AF_INET;
+
+    server_address.sin_port =
+        htons(port);
+
+
+    /*
+     * 문자열 IP 주소를 네트워크 주소로 변환
+     */
+    if (inet_pton(
+            AF_INET,
+            server_ip,
+            &server_address.sin_addr) != 1)
+    {
+        close(socket_fd);
+
+        errno = EINVAL;
+
+        return -1;
+    }
+
+
+    /*
+     * 서버에 연결
+     */
+    if (connect(
+            socket_fd,
+            (struct sockaddr *)&server_address,
+            sizeof(server_address)) < 0)
+    {
+        close(socket_fd);
+
+        return -1;
+    }
+
+
+    return socket_fd;
+}
 
 
 int tcp_accept(

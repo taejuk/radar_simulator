@@ -33,7 +33,7 @@ struct device_context
      */
     uint16_t port;
 
-
+    int is_server;
     /*
      * TCP file descriptor
      */

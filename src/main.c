@@ -25,6 +25,7 @@ int main(void)
             .port = DEVICE_A_PORT,
             .listen_fd = -1,
             .client_fd = -1,
+            .is_server = 0,
             .state = 0,
             .packet_handler = device_a_handler
         },
@@ -34,6 +35,7 @@ int main(void)
             .port = DEVICE_B_PORT,
             .listen_fd = -1,
             .client_fd = -1,
+            .is_server = 0,
             .state = 0,
             .packet_handler = device_b_handler
         },
@@ -43,6 +45,7 @@ int main(void)
             .port = DEVICE_C_PORT,
             .listen_fd = -1,
             .client_fd = -1,
+            .is_server = 0,
             .state = 0,
             .packet_handler = device_c_handler
         },
@@ -52,6 +55,7 @@ int main(void)
             .port = DEVICE_D_PORT,
             .listen_fd = -1,
             .client_fd = -1,
+            .is_server = 0,
             .state = 0,
             .packet_handler = device_d_handler
         },
@@ -61,6 +65,7 @@ int main(void)
             .port = DEVICE_E_PORT,
             .listen_fd = -1,
             .client_fd = -1,
+            .is_server = 0,
             .state = 0,
             .packet_handler = device_e_handler
         },
@@ -70,6 +75,7 @@ int main(void)
             .port = DEVICE_F_PORT,
             .listen_fd = -1,
             .client_fd = -1,
+            .is_server = 0,
             .state = 0,
             .packet_handler = device_f_handler
         }
