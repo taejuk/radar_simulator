@@ -225,14 +225,7 @@ void *comm_thread(
     }
 
 
-    /*
-     * =================================
-     * Connection Loop
-     * =================================
-     *
-     * server: accept 반복
-     * client: connect 반복
-     */
+    
     while (1)
     {
         ctx->client_fd =
@@ -249,18 +242,10 @@ void *comm_thread(
                     "accept" : "connect"
             );
 
-
-            /*
-             * Client 모드에서 연결에 실패하면
-             * CPU를 계속 사용하지 않도록 잠시 대기한다.
-             */
             if (ctx->is_server == 0)
             {
-                sleep(
-                    CONNECT_RETRY_SECONDS
-                );
+                return NULL;
             }
-
 
             continue;
         }
@@ -274,9 +259,6 @@ void *comm_thread(
         );
 
 
-        /*
-         * Header + Payload 수신 및 handler 호출
-         */
         comm_receive_packets(ctx);
 
 
@@ -293,12 +275,19 @@ void *comm_thread(
         ctx->client_fd = -1;
 
 
+        if (ctx->is_server == 0)
+        {
+            printf(
+                "[Device %d] communication thread finished\n",
+                ctx->device_id
+            );
+
+            return NULL;
+        }
+
         /*
-         * server이면 다시 accept()
-         * client이면 다시 connect()
-         */
+        * 서버 모드만 while을 반복하여 다시 accept한다.
+        */
     }
-
-
     return NULL;
 }

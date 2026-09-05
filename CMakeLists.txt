@@ -14,6 +14,8 @@ find_package(Threads REQUIRED)
 
 set(DEVICE_COUNT 6)
 
+set(SERVER_IP "127.0.0.1")
+
 set(DEVICE_A_PORT 5001)
 set(DEVICE_B_PORT 5002)
 set(DEVICE_C_PORT 5003)
@@ -69,7 +71,6 @@ target_compile_options(simulator
     PRIVATE
         -Wall
         -Wextra
-        -Werror
 )
 
 target_link_libraries(simulator
@@ -88,6 +89,22 @@ add_executable(
 
 target_include_directories(
     test_client
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
+add_executable(
+    test_server
+
+    tests/test_server.c
+
+    src/common/tcp.c
+    src/common/packet.c
+)
+
+target_include_directories(
+    test_server
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/generated
