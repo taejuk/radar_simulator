@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(tcp_simulator C)
+project(tcp_simulator LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Threads REQUIRED)
 
@@ -37,6 +40,15 @@ configure_file(
 # executable files
 #
 
+find_package(
+    OpenGL REQUIRED
+)
+
+find_package(
+    glfw3 REQUIRED
+)
+
+
 
 add_executable(simulator
 
@@ -59,12 +71,25 @@ add_executable(simulator
     src/handler/device_d_handler.c
     src/handler/device_e_handler.c
     src/handler/device_f_handler.c
+
+    src/gui/gui_main.cpp
+    src/gui/device_a_gui_state.c
+
+    external/imgui/imgui.cpp
+    external/imgui/imgui_draw.cpp
+    external/imgui/imgui_tables.cpp
+    external/imgui/imgui_widgets.cpp
+
+    external/imgui/backends/imgui_impl_glfw.cpp
+    external/imgui/backends/imgui_impl_opengl3.cpp
 )
 
 target_include_directories(simulator
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/generated
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/backends
 )
 
 target_compile_options(simulator
@@ -76,6 +101,8 @@ target_compile_options(simulator
 target_link_libraries(simulator
     PRIVATE
         Threads::Threads
+        glfw
+        OpenGL::GL
 )
 
 # test 파일 관련 추가할 것들

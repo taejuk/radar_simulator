@@ -1,9 +1,11 @@
 #include "handler/device_a_handler.h"
+
 #include "common/tcp.h"
+#include "gui/device_a_gui_state.h"
 
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
+
 
 int device_a_handle_start(
     device_context_t *ctx,
@@ -12,71 +14,51 @@ int device_a_handle_start(
 {
     packet_header_t response_header;
 
-    const char response_payload[] =
-        "DEVICE A STARTED";
+    uint8_t response_payload[
+        MAX_PAYLOAD_SIZE
+    ];
 
 
-    (void)payload;
+    if (ctx->gui_state == NULL)
+    {
+        fprintf(
+            stderr,
+            "[Device A] GUI state is NULL\n"
+        );
+
+        return -1;
+    }
 
 
     printf(
-        "[Device A] START packet received\n"
-    );
-
-
-    printf(
-        "[Device A] seq = %u\n",
+        "[Device A] START packet received: seq=%u\n",
         (unsigned int)header->seq
     );
 
 
     /*
-     * Device A 상태 변경
+     * 1. 받은 요청을 GUI에 표시한다.
+     * 2. 사용자가 Send 버튼을 누를 때까지 기다린다.
+     * 3. GUI가 작성한 응답을 복사한다.
      */
-    ctx->state = 1;
-
-
-    /*
-     * 응답 Header 초기화
-     */
-    memset(
-        &response_header,
-        0,
-        sizeof(response_header)
-    );
-
-
-    /*
-     * 나중에는 이 부분의 값을
-     * ImGui에서 설정한 값으로 가져오면 된다.
-     */
-    response_header.type =
-        PACKET_STATUS;
-
-    response_header.length =
-        (uint32_t)(
-            sizeof(response_payload) - 1U
+    if (device_a_gui_wait_for_response(
+            ctx->gui_state,
+            header,
+            payload,
+            &response_header,
+            response_payload) < 0)
+    {
+        fprintf(
+            stderr,
+            "[Device A] GUI response wait failed\n"
         );
 
-    /*
-     * 요청과 응답을 매칭하기 위해
-     * 요청 패킷의 seq를 그대로 사용한다.
-     */
-    response_header.seq =
-        header->seq;
-
-    response_header.value =
-        (uint32_t)ctx->state;
-
-    response_header.mode =
-        header->mode;
-
-    response_header.status =
-        0U;
+        return -1;
+    }
 
 
     /*
-     * 응답 Header 전송
+     * 실제 socket 전송은 통신 스레드가 담당한다.
      */
     if (tcp_send_all(
             ctx->client_fd,
@@ -84,31 +66,32 @@ int device_a_handle_start(
             sizeof(response_header)) < 0)
     {
         perror(
-            "[Device A] send response header"
+            "[Device A] response header send"
         );
 
         return -1;
     }
 
 
-    /*
-     * 응답 Payload 전송
-     */
-    if (tcp_send_all(
-            ctx->client_fd,
-            response_payload,
-            response_header.length) < 0)
+    if (response_header.length > 0U)
     {
-        perror(
-            "[Device A] send response payload"
-        );
+        if (tcp_send_all(
+                ctx->client_fd,
+                response_payload,
+                response_header.length) < 0)
+        {
+            perror(
+                "[Device A] response payload send"
+            );
 
-        return -1;
+            return -1;
+        }
     }
 
 
     printf(
-        "[Device A] STATUS response sent\n"
+        "[Device A] GUI response sent: seq=%u\n",
+        (unsigned int)response_header.seq
     );
 
 

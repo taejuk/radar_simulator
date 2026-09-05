@@ -9,6 +9,8 @@
 
 typedef struct device_context device_context_t;
 
+typedef struct device_a_gui_state
+    device_a_gui_state_t;
 
 /*
  * 장비별 packet handler 함수 형태
@@ -51,6 +53,7 @@ struct device_context
     /*
      * 장비별 packet 처리 함수
      */
+    device_a_gui_state_t *gui_state;
     packet_handler_t packet_handler;
 };
 
