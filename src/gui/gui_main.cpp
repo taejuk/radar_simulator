@@ -1,5 +1,6 @@
 #include "gui/gui_main.h"
 
+#include "common/packet.h"
 #include "config.h"
 #include "gui/device_a_gui_state.h"
 
@@ -7,12 +8,12 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl2.h"
 
-
 #include <cstdint>
 #include <cstdio>
 
 
 #define GL_SILENCE_DEPRECATION
+
 #include <GLFW/glfw3.h>
 
 
@@ -29,47 +30,117 @@ static void glfw_error_callback(
 }
 
 
+/*
+ * 두 요청 Header가 같은지 검사한다.
+ *
+ * InternalMsgHeader_t에는 seq가 없으므로
+ * Header의 모든 필드를 비교한다.
+ */
+static bool is_same_request_header(
+    const InternalMsgHeader_t &left,
+    const InternalMsgHeader_t &right)
+{
+    return
+        (left.msgType ==
+         right.msgType) &&
+
+        (left.msgSize ==
+         right.msgSize) &&
+
+        (left.msgSec ==
+         right.msgSec) &&
+
+        (left.msgNSec ==
+         right.msgNSec) &&
+
+        (left.srcId ==
+         right.srcId) &&
+
+        (left.destId ==
+         right.destId);
+}
+
+
 static void draw_device_a_window(
     device_a_gui_state_t *gui_state)
 {
+    /*
+     * GUI에서 입력할 응답 payload
+     *
+     * response_packet.message_type은
+     * 응답 InternalMsgHeader_t의 msgType으로도 사용된다.
+     */
+    static device_a_response_packet_t
+        response_packet =
+        {
+            static_cast<std::uint16_t>(
+                PACKET_STATUS
+            ),
+
+            0U, /* time_sec */
+
+            0U, /* time_nsec */
+
+            0U, /* radar_status */
+
+            1U, /* mode */
+
+            0U  /* status */
+        };
+
 
     /*
-     * 하나의 요청에 Send 버튼을 여러 번 누르는 것을 방지한다.
+     * 하나의 요청에 Send 버튼을 여러 번
+     * 누르는 것을 방지한다.
      */
-    static device_a_response_packet_t response_packet =
-    {
-        static_cast<std::uint16_t>(
-            PACKET_STATUS
-        ),
-        0U, /* time_sec */
-        0U, /* time_nsec */
-        0U, /* radar_status */
-        1U, /* mode */
-        0U  /* status */
-    };
     static bool response_submitted =
         false;
 
+
+    /*
+     * 새로운 요청인지 확인하기 위한 상태
+     */
     static bool request_observed =
         false;
 
-    static std::uint32_t observed_seq =
-        0U;
+    static InternalMsgHeader_t
+        observed_request_header =
+        {};
 
 
-    packet_header_t request_header = {};
+    /*
+     * GUI 공유 상태에서 복사할 요청
+     */
+    InternalMsgHeader_t
+        request_header =
+        {};
 
     std::uint8_t request_payload[
         MAX_PAYLOAD_SIZE + 1U
-    ] = {};
+    ] =
+    {
+        0
+    };
 
 
-    int has_request =
+    const int has_request =
         device_a_gui_get_request(
             gui_state,
             &request_header,
             request_payload
         );
+
+
+    /*
+     * 최초 실행 시 Device A 창 크기 설정
+     */
+    ImGui::SetNextWindowSize(
+        ImVec2(
+            520.0F,
+            560.0F
+        ),
+        ImGuiCond_FirstUseEver
+    );
 
 
     ImGui::Begin(
@@ -89,6 +160,7 @@ static void draw_device_a_window(
             "Failed to read GUI shared state"
         );
 
+
         ImGui::End();
 
         return;
@@ -98,16 +170,20 @@ static void draw_device_a_window(
     if (has_request == 0)
     {
         /*
-         * 이전 요청이 완료되었으므로
-         * 다음 요청에서 다시 Send할 수 있도록 초기화한다.
+         * 처리 중인 요청이 없으므로
+         * 다음 요청에서 다시 Send할 수 있도록 한다.
          */
-        response_submitted = false;
-        request_observed = false;
+        response_submitted =
+            false;
+
+        request_observed =
+            false;
 
 
         ImGui::Text(
             "Waiting for a packet..."
         );
+
 
         ImGui::End();
 
@@ -116,76 +192,92 @@ static void draw_device_a_window(
 
 
     /*
-     * 새로운 요청을 확인한 경우
-     * Send 상태를 초기화한다.
+     * 새로운 요청이면 Send 상태를 초기화한다.
+     *
+     * 기존 Header의 seq 필드가 없어졌으므로
+     * InternalMsgHeader_t 전체 필드로 비교한다.
      */
     if ((!request_observed) ||
-        (observed_seq != request_header.seq))
+        (!is_same_request_header(
+            observed_request_header,
+            request_header)))
     {
-        request_observed = true;
+        request_observed =
+            true;
 
-        observed_seq =
-            request_header.seq;
+        observed_request_header =
+            request_header;
 
-        response_submitted = false;
+        response_submitted =
+            false;
     }
 
 
     /*
      * =====================================
-     * 받은 요청 표시
+     * 수신 Header 표시
      * =====================================
+     *
+     * request_header는 comm_thread에서 이미
+     * Big Endian에서 Host Endian으로 변환된 상태이다.
      */
     ImGui::Text(
-        "Received request"
+        "Received InternalMsgHeader"
     );
 
     ImGui::Separator();
 
 
     ImGui::Text(
-        "type: %u",
+        "msgType: %u",
         static_cast<unsigned int>(
-            request_header.type
+            request_header.msgType
         )
     );
 
     ImGui::Text(
-        "length: %u",
+        "msgSize: %u",
         static_cast<unsigned int>(
-            request_header.length
+            request_header.msgSize
         )
     );
 
     ImGui::Text(
-        "seq: %u",
+        "msgSec: %u",
         static_cast<unsigned int>(
-            request_header.seq
+            request_header.msgSec
         )
     );
 
     ImGui::Text(
-        "value: %u",
+        "msgNSec: %u",
         static_cast<unsigned int>(
-            request_header.value
+            request_header.msgNSec
         )
     );
 
     ImGui::Text(
-        "mode: %u",
+        "srcId: %u",
         static_cast<unsigned int>(
-            request_header.mode
+            request_header.srcId
         )
     );
 
     ImGui::Text(
-        "status: %u",
+        "destId: %u",
         static_cast<unsigned int>(
-            request_header.status
+            request_header.destId
         )
     );
 
 
+    /*
+     * 현재 테스트 payload는 문자열이므로
+     * 문자열 형태로 출력한다.
+     *
+     * 실제 payload가 바이너리 구조체로 바뀌면
+     * 이 출력 부분도 구조체 필드 출력으로 바꿔야 한다.
+     */
     ImGui::Text(
         "payload:"
     );
@@ -198,21 +290,51 @@ static void draw_device_a_window(
         )
     );
 
+
+    /*
+     * =====================================
+     * 응답 Payload 입력
+     * =====================================
+     */
     ImGui::SeparatorText(
-    "Response");
+        "Response Payload"
+    );
 
 
+    /*
+     * 이미 응답을 제출했다면
+     * 입력 상자와 Send 버튼을 비활성화한다.
+     */
     ImGui::BeginDisabled(
         response_submitted
     );
 
 
+    /*
+     * 입력 상자의 너비를 지정한다.
+     */
+    ImGui::PushItemWidth(
+        250.0F
+    );
+
+
+    /*
+     * 이 값은 응답 Header의 msgType으로도 사용된다.
+     */
     ImGui::InputScalar(
         "message_type",
         ImGuiDataType_U16,
         &response_packet.message_type
     );
 
+
+    /*
+     * 아래 time_sec/time_nsec는
+     * device_a_response_packet_t payload의 필드이다.
+     *
+     * InternalMsgHeader_t의 msgSec/msgNSec은
+     * Handler에서 CLOCK_REALTIME으로 따로 설정된다.
+     */
     ImGui::InputScalar(
         "time_sec",
         ImGuiDataType_U32,
@@ -225,15 +347,17 @@ static void draw_device_a_window(
         &response_packet.time_nsec
     );
 
+
     /*
-    * 나노초는 0~999,999,999 범위로 제한한다.
-    */
+     * payload의 time_nsec 범위 제한
+     */
     if (response_packet.time_nsec >
         999999999U)
     {
         response_packet.time_nsec =
             999999999U;
     }
+
 
     ImGui::InputScalar(
         "radar_status",
@@ -254,19 +378,23 @@ static void draw_device_a_window(
     );
 
 
+    ImGui::PopItemWidth();
+
+
     if (ImGui::Button(
             "Send"))
     {
-        const int ret =
+        const int submit_result =
             device_a_gui_submit_response(
                 gui_state,
                 &response_packet
             );
 
 
-        if (ret == 0)
+        if (submit_result == 0)
         {
-            response_submitted = true;
+            response_submitted =
+                true;
         }
     }
 
@@ -283,10 +411,7 @@ static void draw_device_a_window(
                 0.2F,
                 1.0F
             ),
-            "Response submitted for seq=%u",
-            static_cast<unsigned int>(
-                request_header.seq
-            )
+            "Response submitted"
         );
     }
 
@@ -299,7 +424,6 @@ extern "C" int gui_run(
     device_a_gui_state_t *gui_state)
 {
     GLFWwindow *window;
-
 
 
     if (gui_state == nullptr)
@@ -318,7 +442,8 @@ extern "C" int gui_run(
     );
 
 
-    if (glfwInit() == GLFW_FALSE)
+    if (glfwInit() ==
+        GLFW_FALSE)
     {
         std::fprintf(
             stderr,
@@ -329,10 +454,16 @@ extern "C" int gui_run(
     }
 
 
-    glfwDefaultWindowHints();
     /*
-     * GLFW Window와 OpenGL Context 생성
+     * 운영체제와 GLFW가 선택한
+     * 기본 OpenGL Context를 사용한다.
+     *
+     * XQuartz의 구형 OpenGL Context와
+     * 호환하기 위해 특정 버전을 요청하지 않는다.
      */
+    glfwDefaultWindowHints();
+
+
     window = glfwCreateWindow(
         900,
         600,
@@ -363,7 +494,9 @@ extern "C" int gui_run(
     /*
      * VSync 사용
      */
-    glfwSwapInterval(1);
+    glfwSwapInterval(
+        1
+    );
 
 
     /*
@@ -395,6 +528,7 @@ extern "C" int gui_run(
             "ImGui GLFW backend init failed\n"
         );
 
+
         ImGui::DestroyContext();
 
         glfwDestroyWindow(
@@ -413,6 +547,7 @@ extern "C" int gui_run(
             stderr,
             "ImGui OpenGL2 backend init failed\n"
         );
+
 
         ImGui_ImplGlfw_Shutdown();
 
@@ -445,7 +580,7 @@ extern "C" int gui_run(
 
         /*
          * 창이 최소화된 동안에는
-         * 불필요하게 계속 렌더링하지 않는다.
+         * 불필요한 렌더링을 하지 않는다.
          */
         if (glfwGetWindowAttrib(
                 window,
@@ -469,9 +604,6 @@ extern "C" int gui_run(
         ImGui::NewFrame();
 
 
-        /*
-         * Device A 패킷 입력 화면
-         */
         draw_device_a_window(
             gui_state
         );

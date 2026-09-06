@@ -223,7 +223,7 @@ void sim_log_packet(
     sim_log_level_t level,
     int device_id,
     const char *direction,
-    const packet_header_t *header)
+    const InternalMsgHeader_t *header)
 {
     if ((direction == NULL) ||
         (header == NULL))
@@ -236,13 +236,14 @@ void sim_log_packet(
         level,
         device_id,
         direction,
-        "type=%u length=%u seq=%u "
-        "value=%u mode=%u status=%u",
-        (unsigned int)header->type,
-        (unsigned int)header->length,
-        (unsigned int)header->seq,
-        (unsigned int)header->value,
-        (unsigned int)header->mode,
-        (unsigned int)header->status
+        "msgType=%u msgSize=%u "
+        "msgSec=%u msgNSec=%u "
+        "srcId=%u destId=%u",
+        (unsigned int)header->msgType,
+        (unsigned int)header->msgSize,
+        (unsigned int)header->msgSec,
+        (unsigned int)header->msgNSec,
+        (unsigned int)header->srcId,
+        (unsigned int)header->destId
     );
 }

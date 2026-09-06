@@ -1,76 +1,157 @@
 #include "common/packet.h"
 #include "common/tcp.h"
-#include "config.h"
+
 #include "device/device_a_packet.h"
+
+#include "config.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 
-/*
- * Device A 클라이언트로 PACKET_START 요청을 보낸다.
- */
-static int send_start_packet(
-    int peer_fd,
-    uint32_t seq)
+#define TEST_SERVER_ID 100U
+#define DEVICE_A_ID      1U
+
+
+static int send_internal_header(
+    int socket_fd,
+    const InternalMsgHeader_t *host_header)
 {
-    packet_header_t header;
-
-    const char payload[] =
-        "START DEVICE A";
+    InternalMsgHeader_t
+        network_header;
 
 
-    memset(
-        &header,
-        0,
-        sizeof(header)
+    if (internal_msg_header_hton(
+            host_header,
+            &network_header) < 0)
+    {
+        return -1;
+    }
+
+
+    if (tcp_send_all(
+            socket_fd,
+            &network_header,
+            INTERNAL_MSG_HEADER_SIZE) < 0)
+    {
+        return -1;
+    }
+
+
+    return 0;
+}
+
+
+static int receive_internal_header(
+    int socket_fd,
+    InternalMsgHeader_t *host_header)
+{
+    InternalMsgHeader_t
+        network_header;
+
+    ssize_t recv_size;
+
+
+    recv_size = tcp_recv_exact(
+        socket_fd,
+        &network_header,
+        INTERNAL_MSG_HEADER_SIZE
     );
 
 
-    header.type =
+    if (recv_size <= 0)
+    {
+        return -1;
+    }
+
+
+    if ((size_t)recv_size !=
+        INTERNAL_MSG_HEADER_SIZE)
+    {
+        return -1;
+    }
+
+
+    if (internal_msg_header_ntoh(
+            &network_header,
+            host_header) < 0)
+    {
+        return -1;
+    }
+
+
+    if (internal_msg_header_validate(
+            host_header) < 0)
+    {
+        return -1;
+    }
+
+
+    return 0;
+}
+
+
+static int send_start_packet(
+    int peer_fd)
+{
+    InternalMsgHeader_t
+        request_header =
+        {
+            0
+        };
+
+    const char request_payload[] =
+        "START DEVICE A";
+
+
+    request_header.msgType =
         PACKET_START;
 
-    header.length =
-        (uint32_t)(sizeof(payload) - 1U);
-
-    header.seq =
-        seq;
-
-    header.value =
-        100U;
-
-    header.mode =
-        1U;
-
-    header.status =
-        0U;
+    request_header.msgSize =
+        (uint32_t)(
+            sizeof(request_payload) - 1U
+        );
 
 
-    /*
-     * Header 전송
-     */
-    if (tcp_send_all(
-            peer_fd,
-            &header,
-            sizeof(header)) < 0)
+    if (internal_msg_header_set_realtime(
+            &request_header) < 0)
     {
-        perror("send request header");
+        perror(
+            "internal_msg_header_set_realtime"
+        );
 
         return -1;
     }
 
 
-    /*
-     * Payload 전송
-     */
+    request_header.srcId =
+        TEST_SERVER_ID;
+
+    request_header.destId =
+        DEVICE_A_ID;
+
+
+    if (send_internal_header(
+            peer_fd,
+            &request_header) < 0)
+    {
+        perror(
+            "send request header"
+        );
+
+        return -1;
+    }
+
+
     if (tcp_send_all(
             peer_fd,
-            payload,
-            header.length) < 0)
+            request_payload,
+            request_header.msgSize) < 0)
     {
-        perror("send request payload");
+        perror(
+            "send request payload"
+        );
 
         return -1;
     }
@@ -78,58 +159,47 @@ static int send_start_packet(
 
     printf(
         "[Test Server] request sent\n"
-        "  type    = %u\n"
-        "  length  = %u\n"
-        "  seq     = %u\n"
-        "  value   = %u\n"
-        "  mode    = %u\n"
-        "  status  = %u\n"
-        "  payload = \"%s\"\n",
-        (unsigned int)header.type,
-        (unsigned int)header.length,
-        (unsigned int)header.seq,
-        (unsigned int)header.value,
-        (unsigned int)header.mode,
-        (unsigned int)header.status,
-        payload
+        "  msgType = %u\n"
+        "  msgSize = %u\n"
+        "  msgSec  = %u\n"
+        "  msgNSec = %u\n"
+        "  srcId   = %u\n"
+        "  destId  = %u\n",
+        (unsigned int)request_header.msgType,
+        (unsigned int)request_header.msgSize,
+        (unsigned int)request_header.msgSec,
+        (unsigned int)request_header.msgNSec,
+        (unsigned int)request_header.srcId,
+        (unsigned int)request_header.destId
     );
 
 
     return 0;
 }
 
+
 static int receive_response(
     int peer_fd)
 {
+    InternalMsgHeader_t
+        response_header;
+
     device_a_response_packet_t
         response_packet;
 
     ssize_t recv_size;
 
 
-    recv_size = tcp_recv_exact(
-        peer_fd,
-        &response_packet,
-        sizeof(response_packet)
-    );
-
-
-    if (recv_size == 0)
+    /*
+     * 응답 Header 먼저 수신
+     */
+    if (receive_internal_header(
+            peer_fd,
+            &response_header) < 0)
     {
         fprintf(
             stderr,
-            "[Test Server] client disconnected "
-            "before response\n"
-        );
-
-        return -1;
-    }
-
-
-    if (recv_size < 0)
-    {
-        perror(
-            "receive response packet"
+            "[Test Server] response header failed\n"
         );
 
         return -1;
@@ -137,40 +207,92 @@ static int receive_response(
 
 
     printf(
-        "[Test Server] response received\n"
-        "  message_type = %u\n"
-        "  time_sec     = %u\n"
-        "  time_nsec    = %u\n"
-        "  radar_status = %u\n"
-        "  mode         = %u\n"
-        "  status       = %u\n",
-        (unsigned int)response_packet.message_type,
-        (unsigned int)response_packet.time_sec,
-        (unsigned int)response_packet.time_nsec,
-        (unsigned int)response_packet.radar_status,
-        (unsigned int)response_packet.mode,
-        (unsigned int)response_packet.status
+        "[Test Server] response header received\n"
+        "  msgType = %u\n"
+        "  msgSize = %u\n"
+        "  msgSec  = %u\n"
+        "  msgNSec = %u\n"
+        "  srcId   = %u\n"
+        "  destId  = %u\n",
+        (unsigned int)response_header.msgType,
+        (unsigned int)response_header.msgSize,
+        (unsigned int)response_header.msgSec,
+        (unsigned int)response_header.msgNSec,
+        (unsigned int)response_header.srcId,
+        (unsigned int)response_header.destId
     );
 
 
-    if (response_packet.message_type !=
-        (uint16_t)PACKET_STATUS)
+    if (response_header.msgSize !=
+        sizeof(response_packet))
     {
         fprintf(
             stderr,
-            "[Test Server] expected PACKET_STATUS\n"
+            "[Test Server] unexpected payload size: "
+            "received=%u expected=%u\n",
+            (unsigned int)response_header.msgSize,
+            (unsigned int)sizeof(response_packet)
         );
 
         return -1;
     }
 
 
-    if (response_packet.time_nsec >
-        999999999U)
+    /*
+     * Header에 기록된 크기만큼 payload를 수신한다.
+     */
+    recv_size = tcp_recv_exact(
+        peer_fd,
+        &response_packet,
+        response_header.msgSize
+    );
+
+
+    if (recv_size <= 0)
     {
         fprintf(
             stderr,
-            "[Test Server] invalid time_nsec\n"
+            "[Test Server] response payload failed\n"
+        );
+
+        return -1;
+    }
+
+
+    printf(
+        "[Test Server] response payload received\n"
+        "  message_type = %u\n"
+        "  time_sec     = %u\n"
+        "  time_nsec    = %u\n"
+        "  radar_status = %u\n"
+        "  mode         = %u\n"
+        "  status       = %u\n",
+        (unsigned int)
+            response_packet.message_type,
+        (unsigned int)
+            response_packet.time_sec,
+        (unsigned int)
+            response_packet.time_nsec,
+        (unsigned int)
+            response_packet.radar_status,
+        (unsigned int)
+            response_packet.mode,
+        (unsigned int)
+            response_packet.status
+    );
+
+
+    /*
+     * srcId와 destId가 교환되었는지 확인한다.
+     */
+    if ((response_header.srcId !=
+         DEVICE_A_ID) ||
+        (response_header.destId !=
+         TEST_SERVER_ID))
+    {
+        fprintf(
+            stderr,
+            "[Test Server] srcId/destId swap failed\n"
         );
 
         return -1;
@@ -181,27 +303,26 @@ static int receive_response(
 }
 
 
-
 int main(void)
 {
     int listen_fd;
     int peer_fd;
-    int exit_code = 1;
 
-    const uint32_t seq = 1U;
+    int exit_code =
+        1;
 
 
-    /*
-     * Device A가 접속할 테스트 서버 생성
-     */
-    listen_fd = tcp_server_create(
-        DEVICE_A_PORT
-    );
+    listen_fd =
+        tcp_server_create(
+            DEVICE_A_PORT
+        );
 
 
     if (listen_fd < 0)
     {
-        perror("tcp_server_create");
+        perror(
+            "tcp_server_create"
+        );
 
         return 1;
     }
@@ -213,17 +334,17 @@ int main(void)
     );
 
 
-    /*
-     * Device A 연결을 한 번만 받는다.
-     */
-    peer_fd = tcp_accept(
-        listen_fd
-    );
+    peer_fd =
+        tcp_accept(
+            listen_fd
+        );
 
 
     if (peer_fd < 0)
     {
-        perror("tcp_accept");
+        perror(
+            "tcp_accept"
+        );
 
         tcp_close(
             listen_fd
@@ -238,20 +359,13 @@ int main(void)
     );
 
 
-    /*
-     * PACKET_START 요청을 한 번 전송한다.
-     */
     if (send_start_packet(
-            peer_fd,
-            seq) < 0)
+            peer_fd) < 0)
     {
         goto cleanup;
     }
 
 
-    /*
-     * Device A의 PACKET_STATUS 응답을 한 번 수신한다.
-     */
     if (receive_response(
             peer_fd) < 0)
     {

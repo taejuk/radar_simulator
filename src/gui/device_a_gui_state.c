@@ -4,7 +4,6 @@
 #include <string.h>
 
 
-
 int device_a_gui_state_init(
     device_a_gui_state_t *state)
 {
@@ -17,9 +16,6 @@ int device_a_gui_state_init(
     }
 
 
-    /*
-     * flag, header, payload를 모두 0으로 초기화한다.
-     */
     memset(
         state,
         0,
@@ -66,9 +62,6 @@ void device_a_gui_state_destroy(
     }
 
 
-    /*
-     * 이 함수는 통신 스레드가 종료된 다음 호출해야 한다.
-     */
     pthread_cond_destroy(
         &state->response_condition
     );
@@ -78,9 +71,10 @@ void device_a_gui_state_destroy(
     );
 }
 
+
 int device_a_gui_wait_for_response(
     device_a_gui_state_t *state,
-    const packet_header_t *request_header,
+    const InternalMsgHeader_t *request_header,
     const uint8_t *request_payload,
     device_a_response_packet_t *response_packet)
 {
@@ -95,14 +89,14 @@ int device_a_gui_wait_for_response(
     }
 
 
-    if (request_header->length >
+    if (request_header->msgSize >
         MAX_PAYLOAD_SIZE)
     {
         return -1;
     }
 
 
-    if ((request_header->length > 0U) &&
+    if ((request_header->msgSize > 0U) &&
         (request_payload == NULL))
     {
         return -1;
@@ -129,25 +123,22 @@ int device_a_gui_wait_for_response(
     }
 
 
-    /*
-     * 받은 요청을 GUI 공유 상태에 저장한다.
-     */
     state->request_header =
         *request_header;
 
 
-    if (request_header->length > 0U)
+    if (request_header->msgSize > 0U)
     {
         memcpy(
             state->request_payload,
             request_payload,
-            request_header->length
+            request_header->msgSize
         );
     }
 
 
     state->request_payload[
-        request_header->length
+        request_header->msgSize
     ] = '\0';
 
 
@@ -155,9 +146,6 @@ int device_a_gui_wait_for_response(
     state->response_ready = 0;
 
 
-    /*
-     * GUI에서 Send 버튼을 누를 때까지 기다린다.
-     */
     while ((state->response_ready == 0) &&
            (state->shutdown_requested == 0))
     {
@@ -189,10 +177,6 @@ int device_a_gui_wait_for_response(
     }
 
 
-    /*
-     * GUI에서 입력한 응답 구조체를
-     * 통신 스레드의 지역 변수로 복사한다.
-     */
     *response_packet =
         state->response_packet;
 
@@ -210,10 +194,9 @@ int device_a_gui_wait_for_response(
 }
 
 
-
 int device_a_gui_get_request(
     device_a_gui_state_t *state,
-    packet_header_t *request_header,
+    InternalMsgHeader_t *request_header,
     uint8_t *request_payload)
 {
     int ret;
@@ -248,20 +231,14 @@ int device_a_gui_get_request(
             state->request_header;
 
 
-        /*
-         * 마지막 NULL 문자까지 복사한다.
-         */
         memcpy(
             request_payload,
             state->request_payload,
-            state->request_header.length + 1U
+            state->request_header.msgSize + 1U
         );
     }
     else
     {
-        /*
-         * 이전 요청 정보가 GUI에 남지 않도록 초기화한다.
-         */
         memset(
             request_header,
             0,
@@ -279,6 +256,7 @@ int device_a_gui_get_request(
 
     return has_request;
 }
+
 
 int device_a_gui_submit_response(
     device_a_gui_state_t *state,
@@ -304,10 +282,6 @@ int device_a_gui_submit_response(
     }
 
 
-    /*
-     * 요청이 없거나 이미 응답을 제출했으면
-     * 중복 응답을 허용하지 않는다.
-     */
     if ((state->request_pending == 0) ||
         (state->response_ready != 0) ||
         (state->shutdown_requested != 0))
@@ -320,12 +294,8 @@ int device_a_gui_submit_response(
     }
 
 
-    /*
-     * GUI에서 편집한 패킷의 스냅샷을 저장한다.
-     */
     state->response_packet =
         *response_packet;
-
 
     state->response_ready = 1;
 
@@ -369,10 +339,6 @@ void device_a_gui_request_shutdown(
     state->shutdown_requested = 1;
 
 
-    /*
-     * GUI 응답을 기다리는 통신 스레드가 있다면
-     * 종료할 수 있도록 깨운다.
-     */
     pthread_cond_broadcast(
         &state->response_condition
     );

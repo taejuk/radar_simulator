@@ -47,7 +47,7 @@ void sim_log_packet(
     sim_log_level_t level,
     int device_id,
     const char *direction,
-    const packet_header_t *header
+    const InternalMsgHeader_t *header
 );
 
 

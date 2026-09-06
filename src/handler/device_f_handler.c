@@ -5,19 +5,12 @@
 
 int device_f_handle_start(
     device_context_t *ctx,
-    const packet_header_t *header,
+    const InternalMsgHeader_t *header,
     const uint8_t *payload)
 {
     (void)payload;
 
-    printf(
-        "[Device A] START packet received\n"
-    );
-
-    printf(
-        "[Device A] seq = %u\n",
-        (unsigned int)header->seq
-    );
+    
 
     /*
      * 실제 START 시나리오
@@ -36,7 +29,7 @@ int device_f_handle_start(
 
 int device_f_handle_status(
     device_context_t *ctx,
-    const packet_header_t *header,
+    const InternalMsgHeader_t *header,
     const uint8_t *payload)
 {
     (void)header;
@@ -46,10 +39,6 @@ int device_f_handle_status(
         "[Device A] STATUS packet received\n"
     );
 
-    printf(
-        "[Device A] state = %d\n",
-        ctx->state
-    );
 
     /*
      * STATUS 응답 시나리오
@@ -61,7 +50,7 @@ int device_f_handle_status(
 
 int device_f_handle_control(
     device_context_t *ctx,
-    const packet_header_t *header,
+    const InternalMsgHeader_t *header,
     const uint8_t *payload)
 {
     (void)ctx;
@@ -71,10 +60,6 @@ int device_f_handle_control(
         "[Device A] CONTROL packet received\n"
     );
 
-    printf(
-        "[Device A] payload length = %u\n",
-        (unsigned int)header->length
-    );
 
     /*
      * CONTROL 시나리오

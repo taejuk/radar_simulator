@@ -5,7 +5,13 @@
 #include <stdint.h>
 
 
-#define PACKET_HEADER_SIZE  16U
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+#define INTERNAL_MSG_HEADER_SIZE 16U
+
 
 typedef enum
 {
@@ -17,29 +23,68 @@ typedef enum
 
 
 /*
- * Wire protocol header
+ * Internal message header
  *
- * 실제 필드 이름은 프로토콜 규격에 맞게 변경.
+ * Wire size:
+ * 2 + 4 + 4 + 4 + 1 + 1 = 16 bytes
  */
-typedef struct
+typedef struct __attribute__((packed))
 {
-    uint16_t type;
+    uint16_t msgType;
 
-    uint32_t length;
+    uint32_t msgSize;
 
-    uint32_t seq;
+    uint32_t msgSec;
 
-    uint32_t value;
+    uint32_t msgNSec;
 
-    uint8_t mode;
+    uint8_t srcId;
 
-    uint8_t status;
+    uint8_t destId;
 
-} packet_header_t;
+} InternalMsgHeader_t;
 
-int packet_header_validate(
-    const packet_header_t *header
+
+
+/*
+ * Host byte order Header를
+ * Big Endian Header로 변환한다.
+ */
+int internal_msg_header_hton(
+    const InternalMsgHeader_t *host_header,
+    InternalMsgHeader_t *network_header
 );
+
+
+/*
+ * Big Endian Header를
+ * Host byte order Header로 변환한다.
+ */
+int internal_msg_header_ntoh(
+    const InternalMsgHeader_t *network_header,
+    InternalMsgHeader_t *host_header
+);
+
+
+/*
+ * Host byte order로 변환된 Header를 검증한다.
+ */
+int internal_msg_header_validate(
+    const InternalMsgHeader_t *header
+);
+
+
+/*
+ * CLOCK_REALTIME으로 msgSec/msgNSec을 설정한다.
+ */
+int internal_msg_header_set_realtime(
+    InternalMsgHeader_t *header
+);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

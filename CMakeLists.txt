@@ -288,6 +288,7 @@ add_executable(
 
     tests/test_client.c
     src/common/tcp.c
+    src/common/packet.c
 )
 
 

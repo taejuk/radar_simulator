@@ -8,14 +8,9 @@
 
 #include <errno.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 
-/*
- * is_server 값에 따라
- * accept 또는 connect를 수행한다.
- */
 static int comm_open_connection(
     device_context_t *ctx)
 {
@@ -50,18 +45,22 @@ static int comm_open_connection(
 }
 
 
-/*
- * 연결된 socket으로부터 패킷을 계속 수신한다.
- */
 static void comm_receive_packets(
     device_context_t *ctx)
 {
     while (1)
     {
-        packet_header_t header =
-        {
-            0
-        };
+        /*
+         * socket에서 직접 받은 Big Endian Header
+         */
+        InternalMsgHeader_t
+            network_header;
+
+        /*
+         * 프로그램 내부에서 사용할 Host Endian Header
+         */
+        InternalMsgHeader_t
+            host_header;
 
         uint8_t payload[
             MAX_PAYLOAD_SIZE
@@ -70,22 +69,18 @@ static void comm_receive_packets(
         ssize_t recv_size;
 
 
-        /*
-         * payload가 없는 패킷이 Handler로 전달되더라도
-         * 첫 번째 값이 정의되어 있도록 초기화한다.
-         */
         payload[0] = 0U;
 
 
         /*
          * =====================================
-         * Header 수신
+         * 16-byte Header 수신
          * =====================================
          */
         recv_size = tcp_recv_exact(
             ctx->client_fd,
-            &header,
-            sizeof(header)
+            &network_header,
+            INTERNAL_MSG_HEADER_SIZE
         );
 
 
@@ -109,8 +104,7 @@ static void comm_receive_packets(
             DEVICE_LOG_ERROR(
                 ctx->device_id,
                 "HEADER_RECV_FAILED",
-                "socket=%d errno=%d message=%s",
-                ctx->client_fd,
+                "errno=%d message=%s",
                 saved_errno,
                 strerror(saved_errno)
             );
@@ -119,21 +113,16 @@ static void comm_receive_packets(
         }
 
 
-        /*
-         * Header 전체 크기를 받았는지 검사한다.
-         *
-         * tcp_recv_exact()이 정상적으로 구현됐다면
-         * 성공 시 항상 sizeof(header)를 반환해야 한다.
-         */
         if ((size_t)recv_size !=
-            sizeof(header))
+            INTERNAL_MSG_HEADER_SIZE)
         {
             DEVICE_LOG_ERROR(
                 ctx->device_id,
                 "HEADER_SIZE_MISMATCH",
                 "received=%u expected=%u",
                 (unsigned int)recv_size,
-                (unsigned int)sizeof(header)
+                (unsigned int)
+                    INTERNAL_MSG_HEADER_SIZE
             );
 
             break;
@@ -141,38 +130,51 @@ static void comm_receive_packets(
 
 
         /*
-         * =====================================
-         * Header 검증
-         * =====================================
+         * Big Endian에서 Host Endian으로 변환한다.
          */
-        if (packet_header_validate(
-                &header) < 0)
+        if (internal_msg_header_ntoh(
+                &network_header,
+                &host_header) < 0)
+        {
+            DEVICE_LOG_ERROR(
+                ctx->device_id,
+                "HEADER_NTOH_FAILED",
+                "conversion_failed=1"
+            );
+
+            break;
+        }
+
+
+        /*
+         * Host Endian 상태에서 검증한다.
+         */
+        if (internal_msg_header_validate(
+                &host_header) < 0)
         {
             DEVICE_LOG_WARNING(
                 ctx->device_id,
                 "INVALID_HEADER",
-                "type=%u length=%u seq=%u "
-                "value=%u mode=%u status=%u",
-                (unsigned int)header.type,
-                (unsigned int)header.length,
-                (unsigned int)header.seq,
-                (unsigned int)header.value,
-                (unsigned int)header.mode,
-                (unsigned int)header.status
+                "msgType=%u msgSize=%u "
+                "msgSec=%u msgNSec=%u "
+                "srcId=%u destId=%u",
+                (unsigned int)host_header.msgType,
+                (unsigned int)host_header.msgSize,
+                (unsigned int)host_header.msgSec,
+                (unsigned int)host_header.msgNSec,
+                (unsigned int)host_header.srcId,
+                (unsigned int)host_header.destId
             );
 
             break;
         }
 
 
-        /*
-         * 정상적으로 수신된 Header를 기록한다.
-         */
         sim_log_packet(
             SIM_LOG_INFO,
             ctx->device_id,
-            "RX_PACKET",
-            &header
+            "RX_HEADER",
+            &host_header
         );
 
 
@@ -181,12 +183,12 @@ static void comm_receive_packets(
          * Payload 수신
          * =====================================
          */
-        if (header.length > 0U)
+        if (host_header.msgSize > 0U)
         {
             recv_size = tcp_recv_exact(
                 ctx->client_fd,
                 payload,
-                header.length
+                host_header.msgSize
             );
 
 
@@ -195,10 +197,9 @@ static void comm_receive_packets(
                 DEVICE_LOG_INFO(
                     ctx->device_id,
                     "PEER_CLOSED",
-                    "phase=payload "
-                    "type=%u seq=%u",
-                    (unsigned int)header.type,
-                    (unsigned int)header.seq
+                    "phase=payload msgType=%u",
+                    (unsigned int)
+                        host_header.msgType
                 );
 
                 break;
@@ -213,11 +214,12 @@ static void comm_receive_packets(
                 DEVICE_LOG_ERROR(
                     ctx->device_id,
                     "PAYLOAD_RECV_FAILED",
-                    "type=%u seq=%u "
-                    "length=%u errno=%d message=%s",
-                    (unsigned int)header.type,
-                    (unsigned int)header.seq,
-                    (unsigned int)header.length,
+                    "msgType=%u msgSize=%u "
+                    "errno=%d message=%s",
+                    (unsigned int)
+                        host_header.msgType,
+                    (unsigned int)
+                        host_header.msgSize,
                     saved_errno,
                     strerror(saved_errno)
                 );
@@ -227,57 +229,31 @@ static void comm_receive_packets(
 
 
             if ((uint32_t)recv_size !=
-                header.length)
+                host_header.msgSize)
             {
                 DEVICE_LOG_ERROR(
                     ctx->device_id,
                     "PAYLOAD_SIZE_MISMATCH",
-                    "type=%u seq=%u "
                     "received=%u expected=%u",
-                    (unsigned int)header.type,
-                    (unsigned int)header.seq,
                     (unsigned int)recv_size,
-                    (unsigned int)header.length
+                    (unsigned int)
+                        host_header.msgSize
                 );
 
                 break;
             }
-
-
-            DEVICE_LOG_DEBUG(
-                ctx->device_id,
-                "RX_PAYLOAD",
-                "type=%u seq=%u length=%u",
-                (unsigned int)header.type,
-                (unsigned int)header.seq,
-                (unsigned int)header.length
-            );
         }
 
 
         /*
-         * =====================================
-         * 장비별 Handler 호출
-         * =====================================
+         * Handler에는 Host Endian Header를 전달한다.
          */
         if (ctx->packet_handler != NULL)
         {
-            int handler_result;
-
-
-            DEVICE_LOG_DEBUG(
-                ctx->device_id,
-                "HANDLER_START",
-                "type=%u seq=%u",
-                (unsigned int)header.type,
-                (unsigned int)header.seq
-            );
-
-
-            handler_result =
+            const int handler_result =
                 ctx->packet_handler(
                     ctx,
-                    &header,
+                    &host_header,
                     payload
                 );
 
@@ -287,21 +263,9 @@ static void comm_receive_packets(
                 DEVICE_LOG_ERROR(
                     ctx->device_id,
                     "HANDLER_FAILED",
-                    "type=%u seq=%u result=%d",
-                    (unsigned int)header.type,
-                    (unsigned int)header.seq,
-                    handler_result
-                );
-            }
-            else
-            {
-                DEVICE_LOG_DEBUG(
-                    ctx->device_id,
-                    "HANDLER_COMPLETE",
-                    "type=%u seq=%u result=%d",
-                    (unsigned int)header.type,
-                    (unsigned int)header.seq,
-                    handler_result
+                    "msgType=%u",
+                    (unsigned int)
+                        host_header.msgType
                 );
             }
         }
@@ -310,9 +274,9 @@ static void comm_receive_packets(
             DEVICE_LOG_WARNING(
                 ctx->device_id,
                 "HANDLER_NOT_REGISTERED",
-                "type=%u seq=%u",
-                (unsigned int)header.type,
-                (unsigned int)header.seq
+                "msgType=%u",
+                (unsigned int)
+                    host_header.msgType
             );
         }
     }
@@ -342,26 +306,13 @@ void *comm_thread(
         (device_context_t *)arg;
 
 
-    DEVICE_LOG_INFO(
-        ctx->device_id,
-        "THREAD_STARTED",
-        "mode=%s port=%u",
-        (ctx->is_server == 1) ?
-            "server" : "client",
-        (unsigned int)ctx->port
-    );
-
-
-    /*
-     * is_server는 0 또는 1만 허용한다.
-     */
     if ((ctx->is_server != 0) &&
         (ctx->is_server != 1))
     {
         DEVICE_LOG_ERROR(
             ctx->device_id,
             "INVALID_MODE",
-            "is_server=%d expected=0_or_1",
+            "is_server=%d",
             ctx->is_server
         );
 
@@ -369,11 +320,6 @@ void *comm_thread(
     }
 
 
-    /*
-     * =====================================
-     * Server 모드 초기화
-     * =====================================
-     */
     if (ctx->is_server == 1)
     {
         ctx->listen_fd =
@@ -403,19 +349,12 @@ void *comm_thread(
         DEVICE_LOG_INFO(
             ctx->device_id,
             "SERVER_LISTENING",
-            "port=%u socket=%d",
-            (unsigned int)ctx->port,
-            ctx->listen_fd
+            "port=%u",
+            (unsigned int)ctx->port
         );
     }
 
 
-    /*
-     * Server 모드는 연결 종료 후 다시 accept한다.
-     *
-     * Client 모드는 연결과 통신을 한 번만 수행하고
-     * 스레드를 종료한다.
-     */
     while (1)
     {
         ctx->client_fd =
@@ -442,24 +381,14 @@ void *comm_thread(
 
 
             /*
-             * 클라이언트는 연결을 한 번만 시도한다.
+             * Client는 연결을 한 번만 시도한다.
              */
             if (ctx->is_server == 0)
             {
-                DEVICE_LOG_INFO(
-                    ctx->device_id,
-                    "THREAD_FINISHED",
-                    "reason=connect_failed"
-                );
-
                 return NULL;
             }
 
 
-            /*
-             * 서버는 accept에 실패해도
-             * 다음 연결을 다시 기다린다.
-             */
             continue;
         }
 
@@ -467,17 +396,13 @@ void *comm_thread(
         DEVICE_LOG_INFO(
             ctx->device_id,
             "PEER_CONNECTED",
-            "mode=%s socket=%d port=%u",
+            "mode=%s socket=%d",
             (ctx->is_server == 1) ?
                 "server" : "client",
-            ctx->client_fd,
-            (unsigned int)ctx->port
+            ctx->client_fd
         );
 
 
-        /*
-         * 패킷 수신과 Handler 호출
-         */
         comm_receive_packets(
             ctx
         );
@@ -491,32 +416,13 @@ void *comm_thread(
         );
 
 
-        /*
-         * 연결된 peer socket을 닫는다.
-         */
-        if (tcp_close(
-                ctx->client_fd) < 0)
-        {
-            const int saved_errno =
-                errno;
-
-            DEVICE_LOG_WARNING(
-                ctx->device_id,
-                "SOCKET_CLOSE_FAILED",
-                "socket=%d errno=%d message=%s",
-                ctx->client_fd,
-                saved_errno,
-                strerror(saved_errno)
-            );
-        }
-
+        tcp_close(
+            ctx->client_fd
+        );
 
         ctx->client_fd = -1;
 
 
-        /*
-         * Client 모드는 통신을 한 번만 수행한다.
-         */
         if (ctx->is_server == 0)
         {
             DEVICE_LOG_INFO(
@@ -527,12 +433,6 @@ void *comm_thread(
 
             return NULL;
         }
-
-
-        /*
-         * Server 모드만 while을 반복하여
-         * 다음 연결을 다시 accept한다.
-         */
     }
 
 
