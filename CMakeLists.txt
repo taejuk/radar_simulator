@@ -209,7 +209,7 @@ set(
     ${IMGUI_DIR}/imgui_widgets.cpp
 
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl2.cpp
 )
 
 

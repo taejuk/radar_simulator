@@ -5,7 +5,7 @@
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
+#include "imgui_impl_opengl2.h"
 
 
 #include <cstdint>
@@ -319,7 +319,6 @@ extern "C" int gui_run(
 {
     GLFWwindow *window;
 
-    const char *glsl_version;
 
 
     if (gui_state == nullptr)
@@ -349,55 +348,7 @@ extern "C" int gui_run(
     }
 
 
-#if defined(__APPLE__)
-
-    /*
-     * macOS에서는 OpenGL 3.2 Core Profile 사용
-     */
-    glsl_version =
-        "#version 150";
-
-    glfwWindowHint(
-        GLFW_CONTEXT_VERSION_MAJOR,
-        3
-    );
-
-    glfwWindowHint(
-        GLFW_CONTEXT_VERSION_MINOR,
-        2
-    );
-
-    glfwWindowHint(
-        GLFW_OPENGL_PROFILE,
-        GLFW_OPENGL_CORE_PROFILE
-    );
-
-    glfwWindowHint(
-        GLFW_OPENGL_FORWARD_COMPAT,
-        GLFW_TRUE
-    );
-
-#else
-
-    /*
-     * Linux에서는 OpenGL 3.0 사용
-     */
-    glsl_version =
-        "#version 130";
-
-    glfwWindowHint(
-        GLFW_CONTEXT_VERSION_MAJOR,
-        3
-    );
-
-    glfwWindowHint(
-        GLFW_CONTEXT_VERSION_MINOR,
-        0
-    );
-
-#endif
-
-
+    glfwDefaultWindowHints();
     /*
      * GLFW Window와 OpenGL Context 생성
      */
@@ -475,12 +426,11 @@ extern "C" int gui_run(
     }
 
 
-    if (!ImGui_ImplOpenGL3_Init(
-            glsl_version))
+    if (!ImGui_ImplOpenGL2_Init())
     {
         std::fprintf(
             stderr,
-            "ImGui OpenGL3 backend init failed\n"
+            "ImGui OpenGL2 backend init failed\n"
         );
 
         ImGui_ImplGlfw_Shutdown();
@@ -531,7 +481,7 @@ extern "C" int gui_run(
         /*
          * 새로운 ImGui Frame 시작
          */
-        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplOpenGL2_NewFrame();
 
         ImGui_ImplGlfw_NewFrame();
 
@@ -580,7 +530,7 @@ extern "C" int gui_run(
         );
 
 
-        ImGui_ImplOpenGL3_RenderDrawData(
+        ImGui_ImplOpenGL2_RenderDrawData(
             ImGui::GetDrawData()
         );
 
@@ -596,7 +546,7 @@ extern "C" int gui_run(
      * 종료 처리
      * =====================================
      */
-    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplOpenGL2_Shutdown();
 
     ImGui_ImplGlfw_Shutdown();
 
