@@ -227,6 +227,7 @@ add_executable(
 
     ${NETWORK_SOURCES}
     src/common/comm_thread.c
+    src/common/logger.c
 
     src/device/device_a.c
     src/handler/device_a_handler.c

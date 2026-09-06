@@ -32,32 +32,21 @@ static void glfw_error_callback(
 static void draw_device_a_window(
     device_a_gui_state_t *gui_state)
 {
-    /*
-     * GUI에서 입력할 응답 패킷 값
-     */
-    static std::uint16_t response_type =
-        static_cast<std::uint16_t>(
-            PACKET_STATUS
-        );
-
-    static std::uint32_t response_value =
-        1U;
-
-    static std::uint8_t response_mode =
-        1U;
-
-    static std::uint8_t response_status =
-        0U;
-
-
-    static char response_payload[
-        MAX_PAYLOAD_SIZE
-    ] = "DEVICE A STARTED";
-
 
     /*
      * 하나의 요청에 Send 버튼을 여러 번 누르는 것을 방지한다.
      */
+    static device_a_response_packet_t response_packet =
+    {
+        static_cast<std::uint16_t>(
+            PACKET_STATUS
+        ),
+        0U, /* time_sec */
+        0U, /* time_nsec */
+        0U, /* radar_status */
+        1U, /* mode */
+        0U  /* status */
+    };
     static bool response_submitted =
         false;
 
@@ -209,78 +198,70 @@ static void draw_device_a_window(
         )
     );
 
-
-    /*
-     * =====================================
-     * 보낼 응답 입력
-     * =====================================
-     */
     ImGui::SeparatorText(
-        "Response"
-    );
+    "Response");
 
 
-    /*
-     * 이미 Send를 누른 경우
-     * 입력 필드와 버튼을 비활성화한다.
-     */
     ImGui::BeginDisabled(
         response_submitted
     );
 
 
     ImGui::InputScalar(
-        "type",
+        "message_type",
         ImGuiDataType_U16,
-        &response_type
+        &response_packet.message_type
     );
-
 
     ImGui::InputScalar(
-        "value",
+        "time_sec",
         ImGuiDataType_U32,
-        &response_value
+        &response_packet.time_sec
     );
 
+    ImGui::InputScalar(
+        "time_nsec",
+        ImGuiDataType_U32,
+        &response_packet.time_nsec
+    );
+
+    /*
+    * 나노초는 0~999,999,999 범위로 제한한다.
+    */
+    if (response_packet.time_nsec >
+        999999999U)
+    {
+        response_packet.time_nsec =
+            999999999U;
+    }
+
+    ImGui::InputScalar(
+        "radar_status",
+        ImGuiDataType_U32,
+        &response_packet.radar_status
+    );
 
     ImGui::InputScalar(
         "mode",
         ImGuiDataType_U8,
-        &response_mode
+        &response_packet.mode
     );
-
 
     ImGui::InputScalar(
         "status",
         ImGuiDataType_U8,
-        &response_status
+        &response_packet.status
     );
 
 
-    ImGui::InputTextMultiline(
-        "payload",
-        response_payload,
-        sizeof(response_payload),
-        ImVec2(
-            -1.0F,
-            100.0F
-        )
-    );
-
-
-    if (ImGui::Button("Send"))
+    if (ImGui::Button(
+            "Send"))
     {
-        int ret;
-
-
-        ret = device_a_gui_submit_response(
-            gui_state,
-            response_type,
-            response_value,
-            response_mode,
-            response_status,
-            response_payload
-        );
+        const int ret =
+            device_a_gui_submit_response(
+                gui_state,
+                &response_packet
+            );
 
 
         if (ret == 0)

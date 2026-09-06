@@ -3,9 +3,10 @@
 #include "common/comm_thread.h"
 
 #include "device/device_a.h"
-
 #include "gui/device_a_gui_state.h"
 #include "gui/gui_main.h"
+
+#include "common/logger.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -22,6 +23,18 @@ int main(void)
     int ret;
     int gui_ret;
 
+    // logger 초기화
+    if (sim_logger_init(
+        "simulator.log",
+        SIM_LOG_DEBUG) < 0)
+    {
+        fprintf(
+            stderr,
+            "sim_logger_init failed\n"
+        );
+
+        return 1;
+    }
 
     /*
      * =====================================
@@ -151,6 +164,7 @@ int main(void)
         &device_a_gui_state
     );
 
+    sim_logger_shutdown();
 
     if ((gui_ret < 0) ||
         (ret != 0))

@@ -1,6 +1,7 @@
 #include "common/packet.h"
 #include "common/tcp.h"
 #include "config.h"
+#include "device/device_a_packet.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -97,29 +98,19 @@ static int send_start_packet(
     return 0;
 }
 
-
-/*
- * Device A가 보낸 응답 패킷을 수신한다.
- */
 static int receive_response(
     int peer_fd)
 {
-    packet_header_t header;
-
-    uint8_t payload[
-        MAX_PAYLOAD_SIZE + 1U
-    ];
+    device_a_response_packet_t
+        response_packet;
 
     ssize_t recv_size;
 
 
-    /*
-     * 응답 Header 수신
-     */
     recv_size = tcp_recv_exact(
         peer_fd,
-        &header,
-        sizeof(header)
+        &response_packet,
+        sizeof(response_packet)
     );
 
 
@@ -128,7 +119,7 @@ static int receive_response(
         fprintf(
             stderr,
             "[Test Server] client disconnected "
-            "before response header\n"
+            "before response\n"
         );
 
         return -1;
@@ -137,89 +128,33 @@ static int receive_response(
 
     if (recv_size < 0)
     {
-        perror("receive response header");
-
-        return -1;
-    }
-
-
-    /*
-     * Header의 type과 length 검증
-     */
-    if (packet_header_validate(
-            &header) < 0)
-    {
-        fprintf(
-            stderr,
-            "[Test Server] invalid response header\n"
+        perror(
+            "receive response packet"
         );
 
         return -1;
     }
-
-
-    /*
-     * 응답 Payload 수신
-     */
-    if (header.length > 0U)
-    {
-        recv_size = tcp_recv_exact(
-            peer_fd,
-            payload,
-            header.length
-        );
-
-
-        if (recv_size == 0)
-        {
-            fprintf(
-                stderr,
-                "[Test Server] client disconnected "
-                "before response payload\n"
-            );
-
-            return -1;
-        }
-
-
-        if (recv_size < 0)
-        {
-            perror("receive response payload");
-
-            return -1;
-        }
-    }
-
-
-    /*
-     * 문자열 출력을 위한 NULL 문자 추가
-     */
-    payload[header.length] = '\0';
 
 
     printf(
         "[Test Server] response received\n"
-        "  type    = %u\n"
-        "  length  = %u\n"
-        "  seq     = %u\n"
-        "  value   = %u\n"
-        "  mode    = %u\n"
-        "  status  = %u\n"
-        "  payload = \"%s\"\n",
-        (unsigned int)header.type,
-        (unsigned int)header.length,
-        (unsigned int)header.seq,
-        (unsigned int)header.value,
-        (unsigned int)header.mode,
-        (unsigned int)header.status,
-        (const char *)payload
+        "  message_type = %u\n"
+        "  time_sec     = %u\n"
+        "  time_nsec    = %u\n"
+        "  radar_status = %u\n"
+        "  mode         = %u\n"
+        "  status       = %u\n",
+        (unsigned int)response_packet.message_type,
+        (unsigned int)response_packet.time_sec,
+        (unsigned int)response_packet.time_nsec,
+        (unsigned int)response_packet.radar_status,
+        (unsigned int)response_packet.mode,
+        (unsigned int)response_packet.status
     );
 
 
-    /*
-     * Device A가 PACKET_STATUS로 응답했는지 확인
-     */
-    if (header.type != PACKET_STATUS)
+    if (response_packet.message_type !=
+        (uint16_t)PACKET_STATUS)
     {
         fprintf(
             stderr,
@@ -230,8 +165,21 @@ static int receive_response(
     }
 
 
+    if (response_packet.time_nsec >
+        999999999U)
+    {
+        fprintf(
+            stderr,
+            "[Test Server] invalid time_nsec\n"
+        );
+
+        return -1;
+    }
+
+
     return 0;
 }
+
 
 
 int main(void)
