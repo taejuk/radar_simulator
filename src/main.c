@@ -1,32 +1,119 @@
 #include "config.h"
 
 #include "common/comm_thread.h"
-
-#include "device/device_a.h"
-#include "gui/device_a_gui_state.h"
-#include "gui/gui_main.h"
-
 #include "common/logger.h"
 
+#include "device/device_handler.h"
+
+#include "gui/device_gui_state.h"
+#include "gui/gui_main.h"
+
 #include <pthread.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <sys/socket.h>
 
 
 int main(void)
 {
-    pthread_t device_a_thread;
+    pthread_t threads[
+        DEVICE_COUNT
+    ];
 
-    device_a_gui_state_t device_a_gui_state;
 
-    device_context_t device_a;
+    device_gui_state_t gui_states[
+        DEVICE_COUNT
+    ];
 
-    int ret;
-    int gui_ret;
 
-    // logger 초기화
+    device_context_t devices[
+        DEVICE_COUNT
+    ] =
+    {
+        {
+            .device_id = 1,
+            .port = DEVICE_A_PORT,
+            .is_server = 0,
+            .listen_fd = -1,
+            .client_fd = -1,
+            .state = 0,
+            .gui_state = NULL,
+            .packet_handler = device_handler
+        },
+
+        {
+            .device_id = 2,
+            .port = DEVICE_B_PORT,
+            .is_server = 0,
+            .listen_fd = -1,
+            .client_fd = -1,
+            .state = 0,
+            .gui_state = NULL,
+            .packet_handler = device_handler
+        },
+
+        {
+            .device_id = 3,
+            .port = DEVICE_C_PORT,
+            .is_server = 0,
+            .listen_fd = -1,
+            .client_fd = -1,
+            .state = 0,
+            .gui_state = NULL,
+            .packet_handler = device_handler
+        },
+
+        {
+            .device_id = 4,
+            .port = DEVICE_D_PORT,
+            .is_server = 0,
+            .listen_fd = -1,
+            .client_fd = -1,
+            .state = 0,
+            .gui_state = NULL,
+            .packet_handler = device_handler
+        },
+
+        {
+            .device_id = 5,
+            .port = DEVICE_E_PORT,
+            .is_server = 0,
+            .listen_fd = -1,
+            .client_fd = -1,
+            .state = 0,
+            .gui_state = NULL,
+            .packet_handler = device_handler
+        },
+
+        {
+            .device_id = 6,
+            .port = DEVICE_F_PORT,
+            .is_server = 0,
+            .listen_fd = -1,
+            .client_fd = -1,
+            .state = 0,
+            .gui_state = NULL,
+            .packet_handler = device_handler
+        }
+    };
+
+
+    size_t initialized_count =
+        0U;
+
+    size_t started_count =
+        0U;
+
+    int gui_ret =
+        -1;
+
+    int exit_code =
+        1;
+
+
     if (sim_logger_init(
-        "simulator.log",
-        SIM_LOG_DEBUG) < 0)
+            "simulator.log",
+            SIM_LOG_DEBUG) < 0)
     {
         fprintf(
             stderr,
@@ -36,142 +123,158 @@ int main(void)
         return 1;
     }
 
+
     /*
-     * =====================================
-     * Device A GUI 공유 상태 초기화
-     * =====================================
+     * Device마다 독립적인 GUI 공유 상태를 생성한다.
      */
-    ret = device_a_gui_state_init(
-        &device_a_gui_state
-    );
-
-    if (ret < 0)
+    for (size_t i = 0U;
+         i < DEVICE_COUNT;
+         ++i)
     {
-        fprintf(
-            stderr,
-            "device_a_gui_state_init failed\n"
-        );
+        if (device_gui_state_init(
+                &gui_states[i]) < 0)
+        {
+            fprintf(
+                stderr,
+                "device_gui_state_init failed: "
+                "device=%d\n",
+                devices[i].device_id
+            );
 
-        return 1;
+            goto cleanup;
+        }
+
+
+        devices[i].gui_state =
+            &gui_states[i];
+
+        initialized_count +=
+            1U;
     }
 
 
     /*
-     * =====================================
-     * Device A 통신 정보 초기화
-     * =====================================
+     * Device마다 통신 스레드를 하나씩 생성한다.
      */
-    device_a.device_id = 1;
-
-    device_a.port =
-        DEVICE_A_PORT;
-
-    device_a.listen_fd = -1;
-
-    device_a.client_fd = -1;
-
-    /*
-     * Device A는 TCP client로 동작
-     */
-    device_a.is_server = 0;
-
-    device_a.state = 0;
-
-    /*
-     * 통신 스레드와 GUI가 공유할 상태
-     */
-    device_a.gui_state =
-        &device_a_gui_state;
-
-    device_a.packet_handler =
-        device_a_handler;
-
-
-    /*
-     * =====================================
-     * Device A 통신 스레드 시작
-     * =====================================
-     */
-    ret = pthread_create(
-        &device_a_thread,
-        NULL,
-        comm_thread,
-        &device_a
-    );
-
-    if (ret != 0)
+    for (size_t i = 0U;
+         i < DEVICE_COUNT;
+         ++i)
     {
-        fprintf(
-            stderr,
-            "pthread_create failed: device=%d, error=%d\n",
-            device_a.device_id,
-            ret
-        );
+        const int ret =
+            pthread_create(
+                &threads[i],
+                NULL,
+                comm_thread,
+                &devices[i]
+            );
 
-        device_a_gui_state_destroy(
-            &device_a_gui_state
-        );
 
-        return 1;
+        if (ret != 0)
+        {
+            fprintf(
+                stderr,
+                "pthread_create failed: "
+                "device=%d error=%d\n",
+                devices[i].device_id,
+                ret
+            );
+
+            goto cleanup;
+        }
+
+
+        started_count +=
+            1U;
     }
 
 
     /*
-     * =====================================
-     * ImGui 실행
-     * =====================================
-     *
-     * ImGui/GLFW/OpenGL 처리는 메인 스레드에서 수행한다.
-     * gui_run()은 GUI 창이 닫힐 때 반환한다.
+     * GLFW/OpenGL/ImGui는 메인 스레드에서 실행한다.
      */
     gui_ret = gui_run(
-        &device_a_gui_state
+        gui_states,
+        DEVICE_COUNT
     );
 
 
-    /*
-     * GUI 창이 닫혔으므로
-     * 대기 중인 Device A handler를 깨운다.
-     */
-    device_a_gui_request_shutdown(
-        &device_a_gui_state
-    );
-
-
-    /*
-     * Device A 통신 스레드 종료 대기
-     */
-    ret = pthread_join(
-        device_a_thread,
-        NULL
-    );
-
-    if (ret != 0)
+    if (gui_ret == 0)
     {
-        fprintf(
-            stderr,
-            "pthread_join failed: device=%d, error=%d\n",
-            device_a.device_id,
-            ret
+        exit_code =
+            0;
+    }
+
+
+cleanup:
+
+    /*
+     * GUI 응답을 기다리는 모든 Device thread를 깨운다.
+     */
+    for (size_t i = 0U;
+         i < initialized_count;
+         ++i)
+    {
+        device_gui_request_shutdown(
+            &gui_states[i]
         );
     }
 
 
     /*
-     * GUI 공유 자원 해제
+     * recv()에서 대기 중인 socket을 깨운다.
      */
-    device_a_gui_state_destroy(
-        &device_a_gui_state
-    );
+    for (size_t i = 0U;
+         i < started_count;
+         ++i)
+    {
+        if (devices[i].client_fd >= 0)
+        {
+            (void)shutdown(
+                devices[i].client_fd,
+                SHUT_RDWR
+            );
+        }
+    }
+
+
+    for (size_t i = 0U;
+         i < started_count;
+         ++i)
+    {
+        const int ret =
+            pthread_join(
+                threads[i],
+                NULL
+            );
+
+
+        if (ret != 0)
+        {
+            fprintf(
+                stderr,
+                "pthread_join failed: "
+                "device=%d error=%d\n",
+                devices[i].device_id,
+                ret
+            );
+
+            exit_code =
+                1;
+        }
+    }
+
+
+    for (size_t i = 0U;
+         i < initialized_count;
+         ++i)
+    {
+        device_gui_state_destroy(
+            &gui_states[i]
+        );
+    }
+
 
     sim_logger_shutdown();
 
-    if ((gui_ret < 0) ||
-        (ret != 0))
-    {
-        return 1;
-    }
 
-
-    return 0;
+    return exit_code;
 }

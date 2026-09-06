@@ -9,8 +9,8 @@
 typedef struct device_context
     device_context_t;
 
-typedef struct device_a_gui_state
-    device_a_gui_state_t;
+typedef struct device_gui_state
+    device_gui_state_t;
 
 
 typedef int (*packet_handler_t)(
@@ -34,7 +34,10 @@ struct device_context
 
     int state;
 
-    device_a_gui_state_t *gui_state;
+    /*
+     * Device별로 각각 다른 GUI 상태를 가리킨다.
+     */
+    device_gui_state_t *gui_state;
 
     packet_handler_t packet_handler;
 };

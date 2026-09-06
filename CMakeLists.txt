@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 
-
 project(
     tcp_simulator
     LANGUAGES C CXX
@@ -49,39 +48,12 @@ configure_file(
 
 
 # =========================================================
-# Required project files
-# =========================================================
-
-set(
-    REQUIRED_GUI_FILES
-
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/gui/gui_main.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/gui/device_a_gui_state.h
-
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/gui_main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/device_a_gui_state.c
-)
-
-
-foreach(REQUIRED_FILE IN LISTS REQUIRED_GUI_FILES)
-    if(NOT EXISTS "${REQUIRED_FILE}")
-        message(
-            FATAL_ERROR
-            "Required GUI file is missing:\n"
-            "  ${REQUIRED_FILE}\n"
-        )
-    endif()
-endforeach()
-
-
-# =========================================================
-# System dependencies
+# Dependencies
 # =========================================================
 
 find_package(
     Threads REQUIRED
 )
-
 
 find_package(
     OpenGL QUIET
@@ -91,7 +63,7 @@ if(NOT OpenGL_FOUND)
     message(
         FATAL_ERROR
         "OpenGL development files were not found.\n"
-        "Install them on Ubuntu with:\n"
+        "Install them with:\n"
         "  sudo apt install libgl-dev libglx-dev "
         "libopengl-dev libglfw3-dev\n"
     )
@@ -112,7 +84,7 @@ else()
     message(
         FATAL_ERROR
         "GLFW development files were not found.\n"
-        "Install them on Ubuntu with:\n"
+        "Install them with:\n"
         "  sudo apt install libglfw3-dev\n"
     )
 endif()
@@ -127,23 +99,19 @@ elseif(TARGET OpenGL::OpenGL)
 else()
     message(
         FATAL_ERROR
-        "CMake found OpenGL, but no usable OpenGL target exists."
+        "CMake found OpenGL, but no usable target exists."
     )
 endif()
 
 
 # =========================================================
 # Dear ImGui
-#
-# external/imgui가 있으면 해당 소스를 사용한다.
-# 없으면 공식 GitHub 저장소에서 고정 버전을 받는다.
 # =========================================================
 
 set(
     LOCAL_IMGUI_DIR
     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui
 )
-
 
 if(EXISTS "${LOCAL_IMGUI_DIR}/imgui.cpp")
     set(
@@ -155,7 +123,6 @@ if(EXISTS "${LOCAL_IMGUI_DIR}/imgui.cpp")
         STATUS
         "Using local Dear ImGui: ${IMGUI_DIR}"
     )
-
 else()
     include(FetchContent)
 
@@ -188,10 +155,6 @@ else()
 endif()
 
 
-# =========================================================
-# Common source lists
-# =========================================================
-
 set(
     NETWORK_SOURCES
 
@@ -214,10 +177,7 @@ set(
 
 
 # =========================================================
-# Main simulator
-#
-# 현재 main.c는 Device A만 사용하므로
-# Device A 관련 소스만 포함한다.
+# Simulator
 # =========================================================
 
 add_executable(
@@ -226,13 +186,13 @@ add_executable(
     src/main.c
 
     ${NETWORK_SOURCES}
+
     src/common/comm_thread.c
     src/common/logger.c
 
-    src/device/device_a.c
-    src/handler/device_a_handler.c
+    src/device/device_handler.c
 
-    src/gui/device_a_gui_state.c
+    src/gui/device_gui_state.c
     src/gui/gui_main.cpp
 
     ${IMGUI_SOURCES}
@@ -279,64 +239,102 @@ target_compile_options(
 )
 
 
-# =========================================================
-# Test client
-# =========================================================
-
-add_executable(
-    test_client
-
-    tests/test_client.c
-    src/common/tcp.c
-    src/common/packet.c
-)
-
-
-target_include_directories(
-    test_client
-
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/generated
-)
-
-
-target_compile_options(
-    test_client
-
-    PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-)
 
 
 # =========================================================
-# Test server
+# Device A~F exchange tests
 # =========================================================
 
-add_executable(
-    test_server
+function(
+    add_device_exchange_test
+    TARGET_NAME
+    TEST_SOURCE
+)
+    add_executable(
+        ${TARGET_NAME}
 
-    tests/test_server.c
-    ${NETWORK_SOURCES}
+        ${TEST_SOURCE}
+        tests/test_exchange_common.c
+
+        ${NETWORK_SOURCES}
+    )
+
+    target_include_directories(
+        ${TARGET_NAME}
+
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+            ${CMAKE_CURRENT_BINARY_DIR}/generated
+    )
+
+    target_compile_options(
+        ${TARGET_NAME}
+
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+endfunction()
+
+add_device_exchange_test(
+    test_client_a
+    tests/test_client_a.c
 )
 
 
-target_include_directories(
-    test_server
-
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/generated
+add_device_exchange_test(
+    test_client_b
+    tests/test_client_b.c
 )
 
+add_device_exchange_test(
+    test_client_c
+    tests/test_client_c.c
+)
 
-target_compile_options(
-    test_server
+add_device_exchange_test(
+    test_client_d
+    tests/test_client_d.c
+)
 
-    PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
+add_device_exchange_test(
+    test_client_e
+    tests/test_client_e.c
+)
+
+add_device_exchange_test(
+    test_client_f
+    tests/test_client_f.c
+)
+
+add_device_exchange_test(
+    test_server_a
+    tests/test_server_a.c
+)
+
+add_device_exchange_test(
+    test_server_b
+    tests/test_server_b.c
+)
+
+add_device_exchange_test(
+    test_server_c
+    tests/test_server_c.c
+)
+
+add_device_exchange_test(
+    test_server_d
+    tests/test_server_d.c
+)
+
+add_device_exchange_test(
+    test_server_e
+    tests/test_server_e.c
+)
+
+add_device_exchange_test(
+    test_server_f
+    tests/test_server_f.c
 )

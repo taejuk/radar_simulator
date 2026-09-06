@@ -2,12 +2,21 @@
 
 #include "common/packet.h"
 #include "config.h"
-#include "gui/device_a_gui_state.h"
+
+#include "device/device_a_packet.h"
+#include "device/device_b_packet.h"
+#include "device/device_c_packet.h"
+#include "device/device_d_packet.h"
+#include "device/device_e_packet.h"
+#include "device/device_f_packet.h"
+
+#include "gui/device_gui_state.h"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl2.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 
@@ -15,6 +24,17 @@
 #define GL_SILENCE_DEPRECATION
 
 #include <GLFW/glfw3.h>
+
+
+typedef struct device_panel_state
+{
+    bool response_submitted;
+
+    bool response_initialized;
+
+    std::uint64_t observed_generation;
+
+} device_panel_state_t;
 
 
 static void glfw_error_callback(
@@ -31,132 +51,243 @@ static void glfw_error_callback(
 
 
 /*
- * 두 요청 Header가 같은지 검사한다.
- *
- * InternalMsgHeader_t에는 seq가 없으므로
- * Header의 모든 필드를 비교한다.
+ * 현재 A~F payload가 동일한 필드를 가지므로
+ * 공통 초기화 함수를 사용한다.
  */
-static bool is_same_request_header(
-    const InternalMsgHeader_t &left,
-    const InternalMsgHeader_t &right)
+template <typename PacketType>
+static void initialize_response_packet(
+    PacketType &packet)
 {
-    return
-        (left.msgType ==
-         right.msgType) &&
+    packet = {};
 
-        (left.msgSize ==
-         right.msgSize) &&
+    packet.message_type =
+        static_cast<std::uint16_t>(
+            PACKET_STATUS
+        );
 
-        (left.msgSec ==
-         right.msgSec) &&
-
-        (left.msgNSec ==
-         right.msgNSec) &&
-
-        (left.srcId ==
-         right.srcId) &&
-
-        (left.destId ==
-         right.destId);
+    packet.mode =
+        1U;
 }
 
 
-static void draw_device_a_window(
-    device_a_gui_state_t *gui_state)
+/*
+ * 현재 A~F payload에 공통으로 존재하는 필드 편집기다.
+ *
+ * 나중에 특정 Device payload 필드가 달라지면
+ * 해당 Device 전용 draw 함수를 만들어 호출하면 된다.
+ */
+template <typename PacketType>
+static void draw_response_fields(
+    PacketType &packet)
 {
+    ImGui::InputScalar(
+        "message_type",
+        ImGuiDataType_U16,
+        &packet.message_type
+    );
 
 
-    static device_a_response_packet_t
-    response_packet = {};
+    ImGui::InputScalar(
+        "time_sec",
+        ImGuiDataType_U32,
+        &packet.time_sec
+    );
 
-    static bool response_packet_initialized =
-        false;
+
+    ImGui::InputScalar(
+        "time_nsec",
+        ImGuiDataType_U32,
+        &packet.time_nsec
+    );
 
 
-    if (!response_packet_initialized)
+    if (packet.time_nsec >
+        999999999U)
     {
-        response_packet.message_type =
-            static_cast<std::uint16_t>(
-                PACKET_STATUS
-            );
-
-        response_packet.mode =
-            1U;
-
-        /*
-        * 새 필드의 기본값
-        */
-        response_packet.temperature_x10 =
-            250; /* 25.0도 */
-
-        response_packet.voltage_mv =
-            24000U;
-
-        response_packet.fault_code =
-            0U;
-
-
-        response_packet_initialized =
-            true;
+        packet.time_nsec =
+            999999999U;
     }
 
-    /*
-     * 하나의 요청에 Send 버튼을 여러 번
-     * 누르는 것을 방지한다.
-     */
-    static bool response_submitted =
-        false;
+
+    ImGui::InputScalar(
+        "radar_status",
+        ImGuiDataType_U32,
+        &packet.radar_status
+    );
 
 
-    /*
-     * 새로운 요청인지 확인하기 위한 상태
-     */
-    static bool request_observed =
-        false;
-
-    static InternalMsgHeader_t
-        observed_request_header =
-        {};
+    ImGui::InputScalar(
+        "mode",
+        ImGuiDataType_U8,
+        &packet.mode
+    );
 
 
-    /*
-     * GUI 공유 상태에서 복사할 요청
-     */
+    ImGui::InputScalar(
+        "status",
+        ImGuiDataType_U8,
+        &packet.status
+    );
+}
+
+
+static void draw_received_header(
+    const InternalMsgHeader_t &header)
+{
+    ImGui::Text(
+        "msgType: %u",
+        static_cast<unsigned int>(
+            header.msgType
+        )
+    );
+
+
+    ImGui::Text(
+        "msgSize: %u",
+        static_cast<unsigned int>(
+            header.msgSize
+        )
+    );
+
+
+    ImGui::Text(
+        "msgSec: %u",
+        static_cast<unsigned int>(
+            header.msgSec
+        )
+    );
+
+
+    ImGui::Text(
+        "msgNSec: %u",
+        static_cast<unsigned int>(
+            header.msgNSec
+        )
+    );
+
+
+    ImGui::Text(
+        "srcId: %u",
+        static_cast<unsigned int>(
+            header.srcId
+        )
+    );
+
+
+    ImGui::Text(
+        "destId: %u",
+        static_cast<unsigned int>(
+            header.destId
+        )
+    );
+}
+
+
+static void draw_payload_preview(
+    const std::uint8_t *payload,
+    std::uint32_t payload_size)
+{
+    const std::uint32_t preview_size =
+        (payload_size < 32U) ?
+            payload_size : 32U;
+
+
+    ImGui::Text(
+        "Payload preview (%u bytes):",
+        static_cast<unsigned int>(
+            payload_size
+        )
+    );
+
+
+    if (preview_size == 0U)
+    {
+        ImGui::TextDisabled(
+            "empty"
+        );
+
+        return;
+    }
+
+
+    for (std::uint32_t i = 0U;
+         i < preview_size;
+         ++i)
+    {
+        if (i != 0U)
+        {
+            ImGui::SameLine(
+                0.0F,
+                4.0F
+            );
+        }
+
+
+        ImGui::Text(
+            "%02X",
+            static_cast<unsigned int>(
+                payload[i]
+            )
+        );
+    }
+
+
+    if (payload_size >
+        preview_size)
+    {
+        ImGui::TextDisabled(
+            "... first 32 bytes shown"
+        );
+    }
+}
+
+
+template <typename PacketType>
+static void draw_device_panel(
+    const char *device_name,
+    device_gui_state_t *gui_state,
+    PacketType &response_packet,
+    device_panel_state_t &panel_state)
+{
     InternalMsgHeader_t
-        request_header =
-        {};
+        request_header = {};
+
 
     std::uint8_t request_payload[
         MAX_PAYLOAD_SIZE + 1U
-    ] =
-    {
-        0
-    };
+    ] = {};
+
+
+    std::uint64_t request_generation =
+        0U;
 
 
     const int has_request =
-        device_a_gui_get_request(
+        device_gui_get_request(
             gui_state,
             &request_header,
-            request_payload
+            request_payload,
+            &request_generation
         );
 
 
-    /*
-     * 최초 실행 시 Device A 창 크기 설정
-     */
-    ImGui::SetNextWindowSize(
-        ImVec2(
-            520.0F,
-            560.0F
-        ),
-        ImGuiCond_FirstUseEver
-    );
+    if (!panel_state.response_initialized)
+    {
+        initialize_response_packet(
+            response_packet
+        );
+
+        panel_state.response_initialized =
+            true;
+    }
 
 
-    ImGui::Begin(
-        "Device A Packet"
+    ImGui::Text(
+        "%s",
+        device_name
     );
+
+    ImGui::Separator();
 
 
     if (has_request < 0)
@@ -171,223 +302,72 @@ static void draw_device_a_window(
             "Failed to read GUI shared state"
         );
 
-
-        ImGui::End();
-
         return;
     }
 
 
     if (has_request == 0)
     {
-        /*
-         * 처리 중인 요청이 없으므로
-         * 다음 요청에서 다시 Send할 수 있도록 한다.
-         */
-        response_submitted =
+        panel_state.response_submitted =
             false;
-
-        request_observed =
-            false;
-
 
         ImGui::Text(
             "Waiting for a packet..."
         );
-
-
-        ImGui::End();
 
         return;
     }
 
 
     /*
-     * 새로운 요청이면 Send 상태를 초기화한다.
-     *
-     * 기존 Header의 seq 필드가 없어졌으므로
-     * InternalMsgHeader_t 전체 필드로 비교한다.
+     * 동일한 Header가 다시 들어온 경우에도
+     * generation 값으로 새 요청을 구분한다.
      */
-    if ((!request_observed) ||
-        (!is_same_request_header(
-            observed_request_header,
-            request_header)))
+    if (panel_state.observed_generation !=
+        request_generation)
     {
-        request_observed =
-            true;
+        panel_state.observed_generation =
+            request_generation;
 
-        observed_request_header =
-            request_header;
-
-        response_submitted =
+        panel_state.response_submitted =
             false;
     }
 
 
-    /*
-     * =====================================
-     * 수신 Header 표시
-     * =====================================
-     *
-     * request_header는 comm_thread에서 이미
-     * Big Endian에서 Host Endian으로 변환된 상태이다.
-     */
-    ImGui::Text(
-        "Received InternalMsgHeader"
-    );
-
-    ImGui::Separator();
-
-
-    ImGui::Text(
-        "msgType: %u",
-        static_cast<unsigned int>(
-            request_header.msgType
-        )
-    );
-
-    ImGui::Text(
-        "msgSize: %u",
-        static_cast<unsigned int>(
-            request_header.msgSize
-        )
-    );
-
-    ImGui::Text(
-        "msgSec: %u",
-        static_cast<unsigned int>(
-            request_header.msgSec
-        )
-    );
-
-    ImGui::Text(
-        "msgNSec: %u",
-        static_cast<unsigned int>(
-            request_header.msgNSec
-        )
-    );
-
-    ImGui::Text(
-        "srcId: %u",
-        static_cast<unsigned int>(
-            request_header.srcId
-        )
-    );
-
-    ImGui::Text(
-        "destId: %u",
-        static_cast<unsigned int>(
-            request_header.destId
-        )
+    ImGui::SeparatorText(
+        "Received Header"
     );
 
 
-    /*
-     * 현재 테스트 payload는 문자열이므로
-     * 문자열 형태로 출력한다.
-     *
-     * 실제 payload가 바이너리 구조체로 바뀌면
-     * 이 출력 부분도 구조체 필드 출력으로 바꿔야 한다.
-     */
-    ImGui::Text(
-        "payload:"
-    );
-
-    ImGui::SameLine();
-
-    ImGui::TextUnformatted(
-        reinterpret_cast<const char *>(
-            request_payload
-        )
+    draw_received_header(
+        request_header
     );
 
 
-    /*
-     * =====================================
-     * 응답 Payload 입력
-     * =====================================
-     */
+    draw_payload_preview(
+        request_payload,
+        request_header.msgSize
+    );
+
+
     ImGui::SeparatorText(
         "Response Payload"
     );
 
 
-    /*
-     * 이미 응답을 제출했다면
-     * 입력 상자와 Send 버튼을 비활성화한다.
-     */
     ImGui::BeginDisabled(
-        response_submitted
+        panel_state.response_submitted
     );
 
 
-    /*
-     * 입력 상자의 너비를 지정한다.
-     */
     ImGui::PushItemWidth(
         250.0F
     );
 
 
-    /*
-     * 이 값은 응답 Header의 msgType으로도 사용된다.
-     */
-    ImGui::InputScalar(
-        "message_type",
-        ImGuiDataType_U16,
-        &response_packet.message_type
+    draw_response_fields(
+        response_packet
     );
-
-
-    /*
-     * 아래 time_sec/time_nsec는
-     * device_a_response_packet_t payload의 필드이다.
-     *
-     * InternalMsgHeader_t의 msgSec/msgNSec은
-     * Handler에서 CLOCK_REALTIME으로 따로 설정된다.
-     */
-    ImGui::InputScalar(
-        "time_sec",
-        ImGuiDataType_U32,
-        &response_packet.time_sec
-    );
-
-    ImGui::InputScalar(
-        "time_nsec",
-        ImGuiDataType_U32,
-        &response_packet.time_nsec
-    );
-
-
-    /*
-     * payload의 time_nsec 범위 제한
-     */
-    if (response_packet.time_nsec >
-        999999999U)
-    {
-        response_packet.time_nsec =
-            999999999U;
-    }
-
-
-    ImGui::InputScalar(
-        "radar_status",
-        ImGuiDataType_U32,
-        &response_packet.radar_status
-    );
-
-    ImGui::InputScalar(
-        "mode",
-        ImGuiDataType_U8,
-        &response_packet.mode
-    );
-
-    ImGui::InputScalar(
-        "status",
-        ImGuiDataType_U8,
-        &response_packet.status
-    );
-
 
 
     ImGui::PopItemWidth();
@@ -397,15 +377,19 @@ static void draw_device_a_window(
             "Send"))
     {
         const int submit_result =
-            device_a_gui_submit_response(
+            device_gui_submit_response(
                 gui_state,
-                &response_packet
+                response_packet.message_type,
+                &response_packet,
+                static_cast<std::uint32_t>(
+                    sizeof(response_packet)
+                )
             );
 
 
         if (submit_result == 0)
         {
-            response_submitted =
+            panel_state.response_submitted =
                 true;
         }
     }
@@ -414,7 +398,7 @@ static void draw_device_a_window(
     ImGui::EndDisabled();
 
 
-    if (response_submitted)
+    if (panel_state.response_submitted)
     {
         ImGui::TextColored(
             ImVec4(
@@ -426,6 +410,176 @@ static void draw_device_a_window(
             "Response submitted"
         );
     }
+}
+
+
+static void draw_device_tabs(
+    device_gui_state_t *gui_states,
+    std::size_t device_count)
+{
+    static device_panel_state_t
+        panel_states[DEVICE_COUNT] =
+        {};
+
+
+    static device_a_response_packet_t
+        device_a_response =
+        {};
+
+    static device_b_response_packet_t
+        device_b_response =
+        {};
+
+    static device_c_response_packet_t
+        device_c_response =
+        {};
+
+    static device_d_response_packet_t
+        device_d_response =
+        {};
+
+    static device_e_response_packet_t
+        device_e_response =
+        {};
+
+    static device_f_response_packet_t
+        device_f_response =
+        {};
+
+
+    ImGui::SetNextWindowSize(
+        ImVec2(
+            620.0F,
+            620.0F
+        ),
+        ImGuiCond_FirstUseEver
+    );
+
+
+    ImGui::Begin(
+        "Radar Simulator"
+    );
+
+
+    if (ImGui::BeginTabBar(
+            "DeviceTabs"))
+    {
+        if ((device_count > 0U) &&
+            ImGui::BeginTabItem(
+                "Device A"))
+        {
+            ImGui::PushID(0);
+
+            draw_device_panel(
+                "Device A",
+                &gui_states[0],
+                device_a_response,
+                panel_states[0]
+            );
+
+            ImGui::PopID();
+
+            ImGui::EndTabItem();
+        }
+
+
+        if ((device_count > 1U) &&
+            ImGui::BeginTabItem(
+                "Device B"))
+        {
+            ImGui::PushID(1);
+
+            draw_device_panel(
+                "Device B",
+                &gui_states[1],
+                device_b_response,
+                panel_states[1]
+            );
+
+            ImGui::PopID();
+
+            ImGui::EndTabItem();
+        }
+
+
+        if ((device_count > 2U) &&
+            ImGui::BeginTabItem(
+                "Device C"))
+        {
+            ImGui::PushID(2);
+
+            draw_device_panel(
+                "Device C",
+                &gui_states[2],
+                device_c_response,
+                panel_states[2]
+            );
+
+            ImGui::PopID();
+
+            ImGui::EndTabItem();
+        }
+
+
+        if ((device_count > 3U) &&
+            ImGui::BeginTabItem(
+                "Device D"))
+        {
+            ImGui::PushID(3);
+
+            draw_device_panel(
+                "Device D",
+                &gui_states[3],
+                device_d_response,
+                panel_states[3]
+            );
+
+            ImGui::PopID();
+
+            ImGui::EndTabItem();
+        }
+
+
+        if ((device_count > 4U) &&
+            ImGui::BeginTabItem(
+                "Device E"))
+        {
+            ImGui::PushID(4);
+
+            draw_device_panel(
+                "Device E",
+                &gui_states[4],
+                device_e_response,
+                panel_states[4]
+            );
+
+            ImGui::PopID();
+
+            ImGui::EndTabItem();
+        }
+
+
+        if ((device_count > 5U) &&
+            ImGui::BeginTabItem(
+                "Device F"))
+        {
+            ImGui::PushID(5);
+
+            draw_device_panel(
+                "Device F",
+                &gui_states[5],
+                device_f_response,
+                panel_states[5]
+            );
+
+            ImGui::PopID();
+
+            ImGui::EndTabItem();
+        }
+
+
+        ImGui::EndTabBar();
+    }
 
 
     ImGui::End();
@@ -433,16 +587,19 @@ static void draw_device_a_window(
 
 
 extern "C" int gui_run(
-    device_a_gui_state_t *gui_state)
+    device_gui_state_t *gui_states,
+    std::size_t device_count)
 {
     GLFWwindow *window;
 
 
-    if (gui_state == nullptr)
+    if ((gui_states == nullptr) ||
+        (device_count == 0U) ||
+        (device_count > DEVICE_COUNT))
     {
         std::fprintf(
             stderr,
-            "gui_run: gui_state is NULL\n"
+            "gui_run: invalid device state array\n"
         );
 
         return -1;
@@ -466,19 +623,12 @@ extern "C" int gui_run(
     }
 
 
-    /*
-     * 운영체제와 GLFW가 선택한
-     * 기본 OpenGL Context를 사용한다.
-     *
-     * XQuartz의 구형 OpenGL Context와
-     * 호환하기 위해 특정 버전을 요청하지 않는다.
-     */
     glfwDefaultWindowHints();
 
 
     window = glfwCreateWindow(
-        900,
-        600,
+        1000,
+        700,
         "Radar Simulator",
         nullptr,
         nullptr
@@ -503,19 +653,11 @@ extern "C" int gui_run(
     );
 
 
-    /*
-     * VSync 사용
-     */
     glfwSwapInterval(
         1
     );
 
 
-    /*
-     * =====================================
-     * Dear ImGui 초기화
-     * =====================================
-     */
     IMGUI_CHECKVERSION();
 
     ImGui::CreateContext();
@@ -540,7 +682,6 @@ extern "C" int gui_run(
             "ImGui GLFW backend init failed\n"
         );
 
-
         ImGui::DestroyContext();
 
         glfwDestroyWindow(
@@ -560,7 +701,6 @@ extern "C" int gui_run(
             "ImGui OpenGL2 backend init failed\n"
         );
 
-
         ImGui_ImplGlfw_Shutdown();
 
         ImGui::DestroyContext();
@@ -575,25 +715,17 @@ extern "C" int gui_run(
     }
 
 
-    /*
-     * =====================================
-     * GUI Main Loop
-     * =====================================
-     */
     while (glfwWindowShouldClose(
                window) == GLFW_FALSE)
     {
         int display_width;
+
         int display_height;
 
 
         glfwPollEvents();
 
 
-        /*
-         * 창이 최소화된 동안에는
-         * 불필요한 렌더링을 하지 않는다.
-         */
         if (glfwGetWindowAttrib(
                 window,
                 GLFW_ICONIFIED) != 0)
@@ -606,9 +738,6 @@ extern "C" int gui_run(
         }
 
 
-        /*
-         * 새로운 ImGui Frame 시작
-         */
         ImGui_ImplOpenGL2_NewFrame();
 
         ImGui_ImplGlfw_NewFrame();
@@ -616,14 +745,12 @@ extern "C" int gui_run(
         ImGui::NewFrame();
 
 
-        draw_device_a_window(
-            gui_state
+        draw_device_tabs(
+            gui_states,
+            device_count
         );
 
 
-        /*
-         * ImGui 렌더링 데이터 생성
-         */
         ImGui::Render();
 
 
@@ -666,11 +793,6 @@ extern "C" int gui_run(
     }
 
 
-    /*
-     * =====================================
-     * 종료 처리
-     * =====================================
-     */
     ImGui_ImplOpenGL2_Shutdown();
 
     ImGui_ImplGlfw_Shutdown();
