@@ -5,7 +5,11 @@
 #include "common/tcp.h"
 
 #include "config.h"
+#include "device/device_default_response.h"
+
+#if ENABLE_GUI
 #include "gui/device_gui_state.h"
+#endif
 
 #include <stdint.h>
 #include <string.h>
@@ -16,11 +20,9 @@ int device_handler(
     const InternalMsgHeader_t *header,
     const uint8_t *payload)
 {
-    InternalMsgHeader_t
-        response_header;
+    InternalMsgHeader_t response_header;
 
-    InternalMsgHeader_t
-        network_response_header;
+    InternalMsgHeader_t network_response_header;
 
 
     uint8_t response_payload[
@@ -35,8 +37,7 @@ int device_handler(
 
 
     if ((ctx == NULL) ||
-        (header == NULL) ||
-        (ctx->gui_state == NULL))
+        (header == NULL))
     {
         return -1;
     }
@@ -54,12 +55,18 @@ int device_handler(
     );
 
 
+#if ENABLE_GUI
+
     /*
-     * 해당 Device 탭에서 Send 버튼을 누를 때까지
-     * 현재 통신 스레드만 기다린다.
-     *
-     * 다른 Device 통신 스레드는 영향을 받지 않는다.
+     * GUI 사용 모드:
+     * 해당 Device의 Send 버튼을 기다린다.
      */
+    if (ctx->gui_state == NULL)
+    {
+        return -1;
+    }
+
+
     if (device_gui_wait_for_response(
             ctx->gui_state,
             header,
@@ -79,6 +86,43 @@ int device_handler(
         return -1;
     }
 
+#else
+
+    /*
+     * GUI 미사용 모드:
+     * Device별 기본 payload를 즉시 생성한다.
+     */
+    (void)payload;
+
+
+    if (device_default_response_build(
+            ctx->device_id,
+            &response_msg_type,
+            response_payload,
+            (uint32_t)sizeof(response_payload),
+            &response_payload_size) < 0)
+    {
+        DEVICE_LOG_ERROR(
+            ctx->device_id,
+            "DEFAULT_RESPONSE_FAILED",
+            "device_id=%d",
+            ctx->device_id
+        );
+
+        return -1;
+    }
+
+
+    DEVICE_LOG_INFO(
+        ctx->device_id,
+        "DEFAULT_RESPONSE_SELECTED",
+        "msgType=%u msgSize=%u",
+        (unsigned int)response_msg_type,
+        (unsigned int)response_payload_size
+    );
+
+#endif
+
 
     memset(
         &response_header,
@@ -95,7 +139,7 @@ int device_handler(
 
 
     /*
-     * 수신 Header의 출발지와 목적지를 바꾼다.
+     * 요청 Header의 출발지와 목적지를 교환한다.
      */
     response_header.srcId =
         header->destId;
@@ -105,8 +149,7 @@ int device_handler(
 
 
     /*
-     * Header의 시간은 GUI 입력값이 아니라
-     * 실제 전송 시점의 CLOCK_REALTIME으로 설정한다.
+     * 실제 전송 시각을 Header에 기록한다.
      */
     if (internal_msg_header_set_realtime(
             &response_header) < 0)
@@ -167,27 +210,22 @@ int device_handler(
 
     /*
      * Payload 전송
-     *
-     * 현재 단계에서는 기존 코드와 동일하게
-     * payload 구조체를 byte buffer로 그대로 전송한다.
      */
-    if (response_payload_size > 0U)
+    if ((response_payload_size > 0U) &&
+        (tcp_send_all(
+            ctx->client_fd,
+            response_payload,
+            response_payload_size) < 0))
     {
-        if (tcp_send_all(
-                ctx->client_fd,
-                response_payload,
-                response_payload_size) < 0)
-        {
-            DEVICE_LOG_ERROR(
-                ctx->device_id,
-                "PAYLOAD_SEND_FAILED",
-                "msgType=%u msgSize=%u",
-                (unsigned int)response_header.msgType,
-                (unsigned int)response_header.msgSize
-            );
+        DEVICE_LOG_ERROR(
+            ctx->device_id,
+            "PAYLOAD_SEND_FAILED",
+            "msgType=%u msgSize=%u",
+            (unsigned int)response_header.msgType,
+            (unsigned int)response_header.msgSize
+        );
 
-            return -1;
-        }
+        return -1;
     }
 
 

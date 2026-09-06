@@ -3,6 +3,11 @@
 
 #define DEVICE_COUNT        @DEVICE_COUNT@
 
+/*
+ * CMake의 ENABLE_GUI 값을 0 또는 1로 생성한다.
+ */
+#cmakedefine01 ENABLE_GUI
+
 #define SERVER_IP           "@SERVER_IP@"
 
 #define DEVICE_A_PORT       @DEVICE_A_PORT@

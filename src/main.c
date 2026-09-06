@@ -5,8 +5,10 @@
 
 #include "device/device_handler.h"
 
+#if ENABLE_GUI
 #include "gui/device_gui_state.h"
 #include "gui/gui_main.h"
+#endif
 
 #include <pthread.h>
 #include <stddef.h>
@@ -21,9 +23,16 @@ int main(void)
     ];
 
 
+#if ENABLE_GUI
+
     device_gui_state_t gui_states[
         DEVICE_COUNT
     ];
+
+    size_t initialized_count =
+        0U;
+
+#endif
 
 
     device_context_t devices[
@@ -98,17 +107,14 @@ int main(void)
     };
 
 
-    size_t initialized_count =
-        0U;
-
     size_t started_count =
         0U;
 
-    int gui_ret =
-        -1;
+    int stop_threads =
+        0;
 
     int exit_code =
-        1;
+        0;
 
 
     if (sim_logger_init(
@@ -124,8 +130,10 @@ int main(void)
     }
 
 
+#if ENABLE_GUI
+
     /*
-     * Device마다 독립적인 GUI 공유 상태를 생성한다.
+     * GUI 모드에서만 Device별 GUI 상태를 생성한다.
      */
     for (size_t i = 0U;
          i < DEVICE_COUNT;
@@ -141,6 +149,12 @@ int main(void)
                 devices[i].device_id
             );
 
+            exit_code =
+                1;
+
+            stop_threads =
+                1;
+
             goto cleanup;
         }
 
@@ -152,9 +166,18 @@ int main(void)
             1U;
     }
 
+#else
+
+    printf(
+        "[Simulator] GUI disabled: "
+        "default response packets are enabled\n"
+    );
+
+#endif
+
 
     /*
-     * Device마다 통신 스레드를 하나씩 생성한다.
+     * Device 통신 스레드 생성
      */
     for (size_t i = 0U;
          i < DEVICE_COUNT;
@@ -179,6 +202,12 @@ int main(void)
                 ret
             );
 
+            exit_code =
+                1;
+
+            stop_threads =
+                1;
+
             goto cleanup;
         }
 
@@ -188,50 +217,65 @@ int main(void)
     }
 
 
+#if ENABLE_GUI
+
     /*
      * GLFW/OpenGL/ImGui는 메인 스레드에서 실행한다.
      */
-    gui_ret = gui_run(
-        gui_states,
-        DEVICE_COUNT
-    );
-
-
-    if (gui_ret == 0)
+    if (gui_run(
+            gui_states,
+            DEVICE_COUNT) < 0)
     {
         exit_code =
-            0;
+            1;
     }
+
+
+    stop_threads =
+        1;
+
+#endif
 
 
 cleanup:
 
-    /*
-     * GUI 응답을 기다리는 모든 Device thread를 깨운다.
-     */
-    for (size_t i = 0U;
-         i < initialized_count;
-         ++i)
+
+#if ENABLE_GUI
+
+    if (stop_threads != 0)
     {
-        device_gui_request_shutdown(
-            &gui_states[i]
-        );
+        /*
+         * GUI 응답 대기 중인 스레드를 깨운다.
+         */
+        for (size_t i = 0U;
+             i < initialized_count;
+             ++i)
+        {
+            device_gui_request_shutdown(
+                &gui_states[i]
+            );
+        }
     }
 
+#endif
 
-    /*
-     * recv()에서 대기 중인 socket을 깨운다.
-     */
-    for (size_t i = 0U;
-         i < started_count;
-         ++i)
+
+    if (stop_threads != 0)
     {
-        if (devices[i].client_fd >= 0)
+        /*
+         * recv()에서 대기 중인 소켓을 깨운다.
+         */
+        for (size_t i = 0U;
+             i < started_count;
+             ++i)
         {
-            (void)shutdown(
-                devices[i].client_fd,
-                SHUT_RDWR
-            );
+            if (devices[i].client_fd >= 0)
+            {
+                (void)shutdown(
+                    devices[i].client_fd,
+                    SHUT_RDWR
+                );
+            }
         }
     }
 
@@ -263,6 +307,8 @@ cleanup:
     }
 
 
+#if ENABLE_GUI
+
     for (size_t i = 0U;
          i < initialized_count;
          ++i)
@@ -271,6 +317,8 @@ cleanup:
             &gui_states[i]
         );
     }
+
+#endif
 
 
     sim_logger_shutdown();
