@@ -7,6 +7,8 @@
  * CMake의 ENABLE_GUI 값을 0 또는 1로 생성한다.
  */
 #cmakedefine01 ENABLE_GUI
+#define PACKET_JSON_DIR "@PACKET_JSON_DIR@"
+
 
 #define SERVER_IP           "@SERVER_IP@"
 

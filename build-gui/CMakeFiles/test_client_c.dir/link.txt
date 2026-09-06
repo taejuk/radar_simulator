@@ -1,0 +1,1 @@
+/usr/bin/cc -Wl,--dependency-file=CMakeFiles/test_client_c.dir/link.d CMakeFiles/test_client_c.dir/tests/test_client_c.c.o CMakeFiles/test_client_c.dir/tests/test_exchange_common.c.o CMakeFiles/test_client_c.dir/src/common/tcp.c.o CMakeFiles/test_client_c.dir/src/common/packet.c.o -o test_client_c
