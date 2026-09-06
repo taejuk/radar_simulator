@@ -64,30 +64,41 @@ static bool is_same_request_header(
 static void draw_device_a_window(
     device_a_gui_state_t *gui_state)
 {
-    /*
-     * GUI에서 입력할 응답 payload
-     *
-     * response_packet.message_type은
-     * 응답 InternalMsgHeader_t의 msgType으로도 사용된다.
-     */
+
+
     static device_a_response_packet_t
-        response_packet =
-        {
+    response_packet = {};
+
+    static bool response_packet_initialized =
+        false;
+
+
+    if (!response_packet_initialized)
+    {
+        response_packet.message_type =
             static_cast<std::uint16_t>(
                 PACKET_STATUS
-            ),
+            );
 
-            0U, /* time_sec */
+        response_packet.mode =
+            1U;
 
-            0U, /* time_nsec */
+        /*
+        * 새 필드의 기본값
+        */
+        response_packet.temperature_x10 =
+            250; /* 25.0도 */
 
-            0U, /* radar_status */
+        response_packet.voltage_mv =
+            24000U;
 
-            1U, /* mode */
+        response_packet.fault_code =
+            0U;
 
-            0U  /* status */
-        };
 
+        response_packet_initialized =
+            true;
+    }
 
     /*
      * 하나의 요청에 Send 버튼을 여러 번
@@ -375,6 +386,24 @@ static void draw_device_a_window(
         "status",
         ImGuiDataType_U8,
         &response_packet.status
+    );
+
+    ImGui::InputScalar(
+        "temperature_x10",
+        ImGuiDataType_S16,
+        &response_packet.temperature_x10
+    );
+
+    ImGui::InputScalar(
+        "voltage_mv",
+        ImGuiDataType_U16,
+        &response_packet.voltage_mv
+    );
+
+    ImGui::InputScalar(
+        "fault_code",
+        ImGuiDataType_U32,
+        &response_packet.fault_code
     );
 
 

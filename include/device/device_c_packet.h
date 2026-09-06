@@ -1,11 +1,11 @@
-#ifndef DEVICE_A_PACKET_H
-#define DEVICE_A_PACKET_H
+#ifndef DEVICE_C_PACKET_H
+#define DEVICE_C_PACKET_H
 
 #include <stdint.h>
 
 
 /*
- * Device A 응답 Payload
+ * Device C 응답 Payload
  */
 typedef struct
 {
@@ -16,7 +16,7 @@ typedef struct
     uint8_t mode;
     uint8_t status;
 
-} device_a_response_packet_t;
+} device_c_response_packet_t;
 
 
 #endif

@@ -1,4 +1,5 @@
 #include "handler/device_d_handler.h"
+#include "device/device_d_packet.h"
 
 #include <stdio.h>
 
