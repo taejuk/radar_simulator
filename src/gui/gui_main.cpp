@@ -388,23 +388,6 @@ static void draw_device_a_window(
         &response_packet.status
     );
 
-    ImGui::InputScalar(
-        "temperature_x10",
-        ImGuiDataType_S16,
-        &response_packet.temperature_x10
-    );
-
-    ImGui::InputScalar(
-        "voltage_mv",
-        ImGuiDataType_U16,
-        &response_packet.voltage_mv
-    );
-
-    ImGui::InputScalar(
-        "fault_code",
-        ImGuiDataType_U32,
-        &response_packet.fault_code
-    );
 
 
     ImGui::PopItemWidth();
