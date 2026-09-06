@@ -65,16 +65,213 @@ static void initialize_response_packet(
             PACKET_STATUS
         );
 
-    packet.mode =
-        1U;
+    packet.mode = 1U;
+    packet.radar_status = 1U;
+    packet.status = 1U;
+}
+
+/*
+ * 체크박스와 숫자 값의 관계
+ *
+ * 체크됨     -> 0
+ * 체크 안 됨 -> 1
+ */
+template <typename IntegerType>
+static void draw_zero_when_checked(
+    const char *label,
+    IntegerType &value)
+{
+    /*
+     * 0/1 범위를 벗어난 값은 1로 제한한다.
+     */
+    if ((value !=
+         static_cast<IntegerType>(0)) &&
+        (value !=
+         static_cast<IntegerType>(1)))
+    {
+        value =
+            static_cast<IntegerType>(1);
+    }
+
+
+    /*
+     * ImGui::Checkbox()에는 bool 변수를 전달해야 한다.
+     *
+     * uint8_t* 또는 uint32_t*를 bool*로
+     * 직접 형 변환하면 안 된다.
+     */
+    bool checked =
+        (value ==
+         static_cast<IntegerType>(0));
+
+
+    if (ImGui::Checkbox(
+            label,
+            &checked))
+    {
+        value =
+            checked ?
+                static_cast<IntegerType>(0) :
+                static_cast<IntegerType>(1);
+    }
+
+
+    /*
+     * 실제 전송될 숫자를 옆에 표시한다.
+     */
+    ImGui::SameLine();
+
+
+    ImGui::TextDisabled(
+        "send value: %u",
+        static_cast<unsigned int>(
+            value
+        )
+    );
+}
+
+/*
+ * BIT 테이블의 다음 칸에 체크박스를 그린다.
+ *
+ * column_count를 초과하면 ImGui가
+ * 자동으로 다음 행으로 이동한다.
+ */
+template <typename IntegerType>
+static void draw_next_bit_item(
+    const char *label,
+    IntegerType &value)
+{
+    ImGui::TableNextColumn();
+
+
+    draw_zero_when_checked(
+        label,
+        value
+    );
 }
 
 
 /*
- * 현재 A~F payload에 공통으로 존재하는 필드 편집기다.
+ * =====================================
+ * Device A 전용 입력 화면
+ * =====================================
  *
- * 나중에 특정 Device payload 필드가 달라지면
- * 해당 Device 전용 draw 함수를 만들어 호출하면 된다.
+ * radar_status, mode, status만
+ * 0/1 체크박스로 표시한다.
+ */
+static void draw_response_fields(
+    device_a_response_packet_t &packet)
+{
+    ImGui::InputScalar(
+        "message_type",
+        ImGuiDataType_U16,
+        &packet.message_type
+    );
+
+
+    ImGui::InputScalar(
+        "time_sec",
+        ImGuiDataType_U32,
+        &packet.time_sec
+    );
+
+
+    ImGui::InputScalar(
+        "time_nsec",
+        ImGuiDataType_U32,
+        &packet.time_nsec
+    );
+
+
+    /*
+     * 나노초 범위 제한
+     */
+    if (packet.time_nsec >
+        999999999U)
+    {
+        packet.time_nsec =
+            999999999U;
+    }
+
+
+    ImGui::SeparatorText(
+        "Built-In Test"
+    );
+
+
+    /*
+    * 한 행에 표시할 BIT 항목 수
+    *
+    * 2: 항목 이름이 긴 경우
+    * 3: 일반적인 경우
+    * 4: 항목 이름이 짧은 경우
+    */
+    const int bit_column_count =
+        3;
+
+
+    if (ImGui::BeginTable(
+            "DeviceABitTable",
+            bit_column_count,
+            ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchSame))
+    {
+        draw_next_bit_item(
+            "radar_status",
+            packet.radar_status
+        );
+
+
+        draw_next_bit_item(
+            "mode",
+            packet.mode
+        );
+
+
+        draw_next_bit_item(
+            "status",
+            packet.status
+        );
+
+
+        /*
+        * 필드가 추가되면 아래처럼 계속 작성한다.
+        *
+        * 세 번째 열까지 채워지면
+        * 다음 항목부터 자동으로 다음 행에 표시된다.
+        */
+        /*
+        draw_next_bit_item(
+            "power_supply",
+            packet.power_supply
+        );
+
+
+        draw_next_bit_item(
+            "transmitter",
+            packet.transmitter
+        );
+
+
+        draw_next_bit_item(
+            "receiver",
+            packet.receiver
+        );
+        */
+
+
+        ImGui::EndTable();
+    }
+}
+
+
+/*
+ * =====================================
+ * Device B~F 공통 입력 화면
+ * =====================================
+ *
+ * B~F는 기존처럼 숫자 입력 상자를 사용한다.
  */
 template <typename PacketType>
 static void draw_response_fields(
