@@ -1,0 +1,20 @@
+{
+    "message_type": 2,
+    "timestamp": {
+      "sec": 1234,
+      "nsec": 567890000
+    },
+    "built_in_test": {
+      "power_supply": 0,
+      "transmitter": 1,
+      "receiver": 0
+    },
+    "temperature": {
+      "cpu_celsius": 42.5,
+      "rf_celsius": 38.25
+    },
+    "operation": {
+      "mode": 1,
+      "status": 0
+    }
+  }
